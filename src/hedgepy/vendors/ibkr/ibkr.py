@@ -291,7 +291,7 @@ def format_response(response: vendor.APIResponse) -> vendor.APIResponse:
     return response
 
 
-@vendor.register_endpoint(formatter=format_response)
+@vendor.register_endpoint(formatter=format_response, store=False)
 def get_account_summary(app: App, request_id: int, group: str = "All", tags: str = "All"):
     return app.request('req_account_summary', request_id, group, tags)
 
@@ -365,6 +365,6 @@ def get_market_data(app: App,
     return app.request('req_mkt_data', request_id, contract.make(), "", snapshot, False, tick_types)
 
 
-@vendor.register_endpoint(formatter=format_response)
+@vendor.register_endpoint(formatter=format_response, store=False)
 def get_contract_details(app: App, request_id: int, contract: Contract = TEST_CONTRACT):
     return app.request('req_contract_details', request_id, contract.make())

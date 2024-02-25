@@ -30,7 +30,7 @@ def _validate_response_data(py_dtypes: tuple[type], data: tuple[tuple]) -> None:
         for ix, (value, dtype) in enumerate(zip(record, py_dtypes)):
             if not isinstance(value, dtype):
                 raise TypeError(f"Value {value} at index {ix} is not of type {dtype}")
-            assert len(record) == record_len, f"Record {ix} has wrong length ({len(record)} versus {record_len} expected)"
+            assert len(record) == record_len, f"Record {ix} has wrong length ({len(record)} / {record_len} expected)"
 
 
 def _make_stub(which: str, identifiers: tuple[sql.Identifier, sql.Identifier, sql.SQL]) -> sql.SQL:
@@ -38,8 +38,8 @@ def _make_stub(which: str, identifiers: tuple[sql.Identifier, sql.Identifier, sq
 
 
 async def create_table(identifiers: tuple[sql.Identifier, sql.Identifier, sql.SQL], 
-                 py_dtypes: tuple[type], 
-                 pool: AsyncConnectionPool) -> None:
+                       py_dtypes: tuple[type], 
+                       pool: AsyncConnectionPool) -> None:
     schema, table, columns = identifiers
     columns = sql.SQL(', ').join(
         sql.SQL("{} {}").format(
@@ -53,7 +53,10 @@ async def create_table(identifiers: tuple[sql.Identifier, sql.Identifier, sql.SQ
         await cursor.execute(query)
 
 
-async def insert(identifiers: tuple[sql.Identifier, sql.Identifier, sql.SQL], pool: AsyncConnectionPool, data: tuple[tuple], bulk: bool = False) -> None:
+async def insert(identifiers: tuple[sql.Identifier, sql.Identifier, sql.SQL], 
+                 pool: AsyncConnectionPool, 
+                 data: tuple[tuple], 
+                 bulk: bool = False) -> None:
     if bulk:
         query = _make_stub('insert_bulk', identifiers)
         async with pool.cursor() as cursor:
@@ -64,3 +67,10 @@ async def insert(identifiers: tuple[sql.Identifier, sql.Identifier, sql.SQL], po
         async with pool.cursor() as cursor:
             for record in data:
                 await cursor.execute(query, record)  
+
+
+async def update(identifiers: tuple[sql.Identifier, sql.Identifier, sql.SQL], 
+                 pool: AsyncConnectionPool, 
+                 data: tuple[tuple], 
+                 bulk: bool = False) -> None:
+    ...

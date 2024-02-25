@@ -2,7 +2,7 @@ import dotenv
 import requests
 from pathlib import Path
 from functools import wraps, partial
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -99,23 +99,46 @@ class APIResponseMetadata:
     request: requests.PreparedRequest
     page: int = 0
     num_pages: int = 0
-    other: dict | None = None
 
     def __post_init__(self):
         self.remaining_pages = self.num_pages - self.page
+        
+        protocol, url = self.request.url.split('://')
+        
+        try:    
+            base_url, tags = url.split('?')
+        except ValueError:
+            base_url, tags = url, None
+
+        base_url, *directory = base_url.split('/')
+
+        tag_dict = {}
+        if tags:
+            tag_pairs = tags.split('&')
+            tag_dict = {tag: value for tag, value in map(lambda x: x.split('='), tag_pairs)}
+
+        self._url = {'protocol': protocol, 'base_url': base_url, 'directory': directory, 'tags': tag_dict}
+        
+    @property
+    def url(self):
+        return self._url
 
 
 @dataclass
 class APIResponse:
     data: tuple[tuple[Any]]
-    fields: tuple[tuple[str, type]] | None = None
+    fields: tuple[tuple[str, type]]
+    index: str | tuple[str] | None = None
     metadata: APIResponseMetadata | None = None
     corr_id: str | None = None    
     
     def __post_init__(self):
         if not self.corr_id:
             self.corr_id = str(uuid4())
-
+        if self.index:
+            if isinstance(self.index, str):
+                self.index = (self.index,)
+                
 
 """Note: due to the non-default argument 'metadata' in Response, we cannot subclass it under FormattedResponse"""
 """as doing so clashes with the init logic for dataclass, so instead we 'manually' subclass by copy/pasting..."""
@@ -123,27 +146,37 @@ class APIResponse:
 
 @dataclass
 class APIFormattedResponse:
-    fields: tuple[tuple[str, type]]
     data: tuple[tuple[Any]]
+    fields: tuple[tuple[str, type]]
     vendor_name: str
     endpoint_name: str
+    index: str | tuple[str] | None = None
     metadata: APIResponseMetadata | None = None
-    id: str | None = None
+    corr_id: str | None = None
+    table_type: Literal['wide', 'long'] | None = None
     
     @classmethod
-    def format(cls, response: APIResponse, vendor_name: str, endpoint_name: str) -> 'APIFormattedResponse':
-        return cls(fields=response.fields, 
-                   data=response.data, 
+    def format(cls, 
+               response: APIResponse, 
+               vendor_name: str, 
+               endpoint_name: str, 
+               table_type: Literal['wide', 'long'] | None = None
+               ) -> 'APIFormattedResponse':
+        return cls(data=response.data,
+                   fields=response.fields,  
                    vendor_name=vendor_name, 
                    endpoint_name=endpoint_name, 
+                   index=response.index,
                    metadata=response.metadata, 
-                   id=response.id)
+                   corr_id=response.corr_id, 
+                   table_type=table_type)
 
 
 def rest_get(base_url: str, 
              headers: dict[str, str] | None = None,
              suffix: str | None = None,
-             directory: tuple[str] | None = None, tags: dict[str, str] | None = None
+             directory: tuple[str] | None = None, 
+             tags: dict[str, str] | None = None
         ) -> requests.Response:
     url = base_url + '/'
 
@@ -184,12 +217,15 @@ def format_rest_response(response: requests.Response) -> tuple[tuple[Any]]:
             raise TypeError('Formatting failed due to incorrect record type:\n'
                             f'RECORD: {record}\n'
                             f'TYPE: {type(record)} (allowed: list, tuple, dict)\n'
-                            'Please consider writing a custom formatting function and registering it via generic_rest.register')
+                            'Please consider writing a custom formatting function and registering it '
+                            'via generic_rest.register')
         data += record
     return data
 
 
-def register_endpoint(formatter: Callable[[requests.Response], APIResponse]) -> Callable[..., APIFormattedResponse]:
+def register_endpoint(formatter: Callable[[requests.Response], APIResponse], 
+                      table_type: Literal['wide', 'long'] | None = None
+                      ) -> Callable[..., APIFormattedResponse]:
     def decorator(endpoint: Callable[..., requests.Response]): 
         @wraps(endpoint)
         def wrapper(*args, **kwargs) -> APIFormattedResponse:            
@@ -197,7 +233,7 @@ def register_endpoint(formatter: Callable[[requests.Response], APIResponse]) -> 
             endpoint_name: str = endpoint.__name__
             raw_response = endpoint(*args, **kwargs)            
             interim_response = formatter(raw_response)
-            final_response = APIFormattedResponse.format(interim_response, vendor_name, endpoint_name)
+            final_response = APIFormattedResponse.format(interim_response, vendor_name, endpoint_name, table_type)
             return final_response
         return wrapper
     return decorator

@@ -11,11 +11,11 @@ _ENV_PATH = Path('.env')
 _API_KEY = dotenv.get_key(_ENV_PATH, 'FRED_API_KEY')
 
 
-get = vendor.bind_rest_get(base_url="https://api.stlouisfed.org/fred/", suffix=f'?api_key={_API_KEY}&file_type=json')
+get = vendor.bind_rest_get(base_url="https://api.stlouisfed.org", suffix=f'?api_key={_API_KEY}&file_type=json')
 
 
 def request_category(category: int = 0, attribute: str | None = None, **kwargs):
-    directory = ('category', attribute) if attribute else ('category',)
+    directory = ('fred', 'category', attribute) if attribute else ('fred', 'category',)
     tags = {'category_id': category}
     if kwargs:
         tags.update(kwargs) 
@@ -88,7 +88,7 @@ def format_releases(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_releases)
 def get_releases():
-    return get(directory=(('releases'),))
+    return get(directory=(('fred', 'releases'),))
 
 
 def format_releases_dates(response: requests.Response):
@@ -102,7 +102,7 @@ def format_releases_dates(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_releases_dates)
 def get_releases_dates(offset: int = 0):
-    return get(directory=(('releases', 'dates')), tags={'offset': offset})
+    return get(directory=(('fred', 'releases', 'dates')), tags={'offset': offset})
 
 
 def format_release(response: requests.Response):
@@ -119,8 +119,8 @@ def format_release(response: requests.Response):
 
 
 @vendor.register_endpoint(formatter=format_release)
-def get_release(release_id: int = 53):  # 53 is GDP
-    return get(directory=(('release',)), tags={'release_id': release_id})
+def get_release(release_id: int = 53):  # GDP
+    return get(directory=(('fred', 'release',)), tags={'release_id': release_id})
 
 
 def format_release_dates(response: requests.Response):
@@ -134,7 +134,7 @@ def format_release_dates(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_release_dates)
 def get_release_dates(release_id: int = 53, offset: int = 0):
-    return get(directory=(('release', 'dates')), tags={'release_id': release_id, 'offset': offset})
+    return get(directory=(('fred', 'release', 'dates')), tags={'release_id': release_id, 'offset': offset})
 
 
 def format_release_series(response: requests.Response):
@@ -148,7 +148,7 @@ def format_release_series(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_release_series)
 def get_release_series(release_id: int = 53, offset: int = 0):
-    return get(directory=(('release', 'series')), tags={'release_id': release_id, 'offset': offset})
+    return get(directory=(('fred', 'release', 'series')), tags={'release_id': release_id, 'offset': offset})
 
 
 def format_release_tags(response: requests.Response):
@@ -162,7 +162,7 @@ def format_release_tags(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_release_tags)
 def get_release_tags(release_id: int = 53, offset: int = 0):
-    return get(directory=(('release', 'tags')), tags={'release_id': release_id, 'offset': offset})
+    return get(directory=(('fred', 'release', 'tags')), tags={'release_id': release_id, 'offset': offset})
 
 
 def format_release_tables(response: requests.Response):
@@ -200,7 +200,7 @@ def get_release_tables(release_id: int = 53, element_id: int | None = None, offs
     tags = {'release_id': release_id, 'offset': offset}
     if element_id:
         tags.update({'element_id': element_id})
-    return get(directory=(('release', 'tables')), tags=tags)
+    return get(directory=(('fred', 'release', 'tables')), tags=tags)
 
 
 def format_series(response: requests.Response):
@@ -228,7 +228,7 @@ def format_series(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_series)
 def get_series(series_id: str = "GNPCA"):
-    return get(directory=(('series'),), tags={'series_id': series_id})
+    return get(directory=(('fred', 'series'),), tags={'series_id': series_id})
 
 
 def format_series_categories(response: requests.Response):
@@ -241,21 +241,25 @@ def format_series_categories(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_series_categories)
 def get_series_categories(series_id: str = "GNPCA"):
-    return get(directory=(('series', 'categories')), tags={'series_id': series_id})
+    return get(directory=(('fred', 'series', 'categories')), tags={'series_id': series_id})
 
 
 def format_series_observations(response: requests.Response):
     raw_data: dict = response.json()
     metadata = make_metadata(response=response, raw_data=raw_data)
+    series_id = metadata.url['tags']['series_id']
     formatted_data = tuple()
     for item in raw_data['observations']:
-        formatted_data += ((item['date'], item['value']),)
-    return vendor.APIResponse(metadata=metadata, fields=(('date', str), ('value', str)), data=formatted_data)
+        formatted_data += ((item['date'], series_id, item['value']),)
+    return vendor.APIResponse(metadata=metadata, 
+                              fields=(('date', str), ('series_id', str), ('value', str)), 
+                              index=('date', 'series_id'),
+                              data=formatted_data)
 
 
-@vendor.register_endpoint(formatter=format_series_observations)
+@vendor.register_endpoint(formatter=format_series_observations, table_type='long')
 def get_series_observations(series_id: str = "GNPCA", observation_start: str = "2000-01-01", observation_end: str = "2020-01-01"):
-    return get(directory=(('series', 'observations')), tags={'series_id': series_id, 'observation_start': observation_start, 'observation_end': observation_end})
+    return get(directory=(('fred', 'series', 'observations')), tags={'series_id': series_id, 'observation_start': observation_start, 'observation_end': observation_end})
 
 
 def format_series_release(response: requests.Response):
@@ -273,7 +277,7 @@ def format_series_release(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_series_release)
 def get_series_release(series_id: str = "GNPCA"):
-    return get(directory=(('series', 'release')), tags={'series_id': series_id})
+    return get(directory=(('fred', 'series', 'release')), tags={'series_id': series_id})
 
 
 def format_series_tags(response: requests.Response):
@@ -287,7 +291,7 @@ def format_series_tags(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_series_tags)
 def get_series_tags(series_id: str = "GNPCA"):
-    return get(directory=(('series', 'tags')), tags={'series_id': series_id})
+    return get(directory=(('fred', 'series', 'tags')), tags={'series_id': series_id})
 
 
 def format_series_updates(response: requests.Response):
@@ -301,7 +305,7 @@ def format_series_updates(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_series_updates)
 def get_series_updates(series_id: str = "GNPCA", offset: int = 0):
-    return get(directory=(('series', 'updates')), tags={'series_id': series_id, 'offset': offset})
+    return get(directory=(('fred', 'series', 'updates')), tags={'series_id': series_id, 'offset': offset})
 
 
 def format_series_vintage_dates(response: requests.Response):
@@ -315,7 +319,7 @@ def format_series_vintage_dates(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_series_vintage_dates)
 def get_series_vintage_dates(series_id: str = "GNPCA", offset: int = 0):
-    return get(directory=(('series', 'vintagedates')), tags={'series_id': series_id, 'offset': offset})
+    return get(directory=(('fred', 'series', 'vintagedates')), tags={'series_id': series_id, 'offset': offset})
 
 
 def format_sources(response: requests.Response):
@@ -333,7 +337,7 @@ def format_sources(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_sources)
 def get_sources(offset: int = 0):
-    return get(directory=(('sources'),), tags={'offset': offset})
+    return get(directory=(('fred', 'sources'),), tags={'offset': offset})
 
 
 def format_tags(response: requests.Response):
@@ -347,7 +351,7 @@ def format_tags(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_tags)
 def get_tags():
-    return get(directory=(('tags'),))
+    return get(directory=(('fred', 'tags'),))
 
 
 def format_tags_series(response: requests.Response):
@@ -361,4 +365,4 @@ def format_tags_series(response: requests.Response):
 
 @vendor.register_endpoint(formatter=format_tags_series)
 def get_tags_series(tag_names: str = "usa", offset: int = 0):
-    return get(directory=(('tags', 'series')), tags={'tag_names': tag_names, 'offset': offset})
+    return get(directory=(('fred', 'tags', 'series')), tags={'tag_names': tag_names, 'offset': offset})
