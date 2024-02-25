@@ -14,7 +14,7 @@ QUERY_STUBS = {
 }
 
 
-def _parse_response(response: APIFormattedResponse
+def parse_response(response: APIFormattedResponse
                     ) -> tuple[tuple[sql.Identifier, sql.Identifier, sql.SQL], tuple[type], tuple[tuple]]:
     schema = sql.Identifier(response.vendor_name)
     table = sql.Identifier(response.endpoint_name)
@@ -24,7 +24,7 @@ def _parse_response(response: APIFormattedResponse
     return identifiers, py_dtypes, response.data
 
 
-def _validate_response_data(py_dtypes: tuple[type], data: tuple[tuple]) -> None:
+def validate_response_data(py_dtypes: tuple[type], data: tuple[tuple]) -> None:
     record_len = len(data[0])
     for record in data:
         for ix, (value, dtype) in enumerate(zip(record, py_dtypes)):
