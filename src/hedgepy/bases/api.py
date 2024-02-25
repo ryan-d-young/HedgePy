@@ -5,7 +5,7 @@ from typing import Callable, Literal
 from dataclasses import dataclass
 from collections import UserDict
 
-from hedgepy.vendors.common import APIEndpoint, APIFormattedResponse
+from hedgepy.bases.vendor import APIEndpoint, APIFormattedResponse
 
 
 @dataclass
