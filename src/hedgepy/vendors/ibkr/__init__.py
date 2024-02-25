@@ -1,11 +1,11 @@
-from hedgepy.vendors import common
+from hedgepy.bases import vendor
 from hedgepy.vendors.ibkr import ibkr
 
-endpoint = common.APIEndpoint(app_constructor = ibkr.App.__init__, 
-                              environment_variables = (common.APIEnvironmentVariable.from_dotenv('IBKR_IP'), 
-                                                       common.APIEnvironmentVariable.from_dotenv('IBKR_PORT'), 
-                                                       common.APIEnvironmentVariable.from_dotenv('IBKR_CLIENT_ID')),
-                              loops = (common.APIEventLoop(start_fn = ibkr.App.run, 
+endpoint = vendor.APIEndpoint(app_constructor = ibkr.App.__init__, 
+                              environment_variables = (vendor.APIEnvironmentVariable.from_dotenv('IBKR_IP'), 
+                                                       vendor.APIEnvironmentVariable.from_dotenv('IBKR_PORT'), 
+                                                       vendor.APIEnvironmentVariable.from_dotenv('IBKR_CLIENT_ID')),
+                              loops = (vendor.APIEventLoop(start_fn = ibkr.App.run, 
                                                            stop_fn = ibkr.App.disconnect),), 
                               getters=(ibkr.get_account_summary, 
                                        ibkr.get_contract_details, 

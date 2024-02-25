@@ -1,21 +1,21 @@
 import dotenv
 from pathlib import Path
 from requests import Response
-from hedgepy.vendors import common
+from hedgepy.bases import vendor
 
 
 _ENV_PATH = Path('.env')
 _COMPANY = dotenv.get_key(_ENV_PATH, 'EDGAR_COMPANY')
 _EMAIL = dotenv.get_key(_ENV_PATH, 'EDGAR_EMAIL')
 
-get_data = common.bind_rest_get(base_url='https://data.sec.gov', 
+get_data = vendor.bind_rest_get(base_url='https://data.sec.gov', 
                                 headers={'Accept': 'application/json',
                                          'Accept-Encoding': 'gzip, deflate',
                                          'Host': 'data.sec.gov', 
                                          'User-Agent': f'{_COMPANY} {_EMAIL}'})
 
 
-_get_tickers = common.bind_rest_get(base_url='https://www.sec.gov',
+_get_tickers = vendor.bind_rest_get(base_url='https://www.sec.gov',
                                     directory=('files', 'company_tickers.json'),
                                     headers={'Accept': 'application/json',
                                              'Accept-Encoding': 'gzip, deflate',
@@ -37,13 +37,13 @@ def format_tickers(response: Response) -> dict[str, dict[str, str]]:
                             record['ticker'], 
                             record['title']),)
 
-    return common.APIResponse(fields=(('cik', str), 
+    return vendor.APIResponse(fields=(('cik', str), 
                                       ('ticker', str), 
                                       ('title', str)), 
                               data=formatted_data)
 
 
-@common.register_endpoint(formatter=format_tickers)
+@vendor.register_endpoint(formatter=format_tickers)
 def get_tickers():
     return _get_tickers()
 
@@ -71,7 +71,7 @@ def format_submissions(response: Response) -> list[dict]:
                             raw_data['primaryDocument'][ix],
                             bool(raw_data['isXBRL'][ix])),)
     
-    return common.APIResponse(fields=(('form', str), 
+    return vendor.APIResponse(fields=(('form', str), 
                                       ('accession_number', str), 
                                       ('filing_date', str), 
                                       ('report_date', str), 
@@ -82,7 +82,7 @@ def format_submissions(response: Response) -> list[dict]:
                               data=formatted_data)
 
 
-@common.register_endpoint(formatter=format_submissions)
+@vendor.register_endpoint(formatter=format_submissions)
 def get_submissions(ticker: str = 'AAPL') -> Response:
     cik = _ticker_to_cik(ticker)
     directory = ('submissions', f'CIK{cik}.json')
@@ -102,7 +102,7 @@ def format_concept(response: Response) -> list[dict]:
                                 record['val'], 
                                 record['accn']),)
 
-    return common.APIResponse(fields=(('unit', str),
+    return vendor.APIResponse(fields=(('unit', str),
                                       ('fiscal_year', int),
                                       ('fiscal_period', str),
                                       ('form', str),
@@ -111,7 +111,7 @@ def format_concept(response: Response) -> list[dict]:
                                 data=formatted_data)
 
 
-@common.register_endpoint(formatter=format_concept)
+@vendor.register_endpoint(formatter=format_concept)
 def get_concept(ticker: str = 'AAPL', tag: str = 'Assets') -> Response:
     cik = _ticker_to_cik(ticker)
     directory = ('api', 'xbrl', 'companyconcept', f'CIK{cik}', 'us-gaap', f'{tag}.json')
@@ -140,7 +140,7 @@ def format_facts(response: Response):
                                         record['form'], 
                                         record['filed']),)
 
-    return common.APIResponse(fields=(('taxonomy', str),
+    return vendor.APIResponse(fields=(('taxonomy', str),
                                         ('line_item', str),
                                         ('unit', str),
                                         ('label', str),
@@ -154,14 +154,14 @@ def format_facts(response: Response):
                                     data=formatted_data)
 
 
-@common.register_endpoint(formatter=format_facts)
+@vendor.register_endpoint(formatter=format_facts)
 def get_facts(ticker: str = 'AAPL') -> Response:
     cik = _ticker_to_cik(ticker)
     directory = ('api', 'xbrl', 'companyfacts', f'CIK{cik}.json')
     return get_data(directory=directory)
 
 
-def format_frame(response: Response) -> common.APIFormattedResponse:
+def format_frame(response: Response) -> vendor.APIFormattedResponse:
     raw_data = response.json()
     formatted_data = tuple()
     
@@ -179,7 +179,7 @@ def format_frame(response: Response) -> common.APIFormattedResponse:
                             record['end'], 
                             record['val']),)
     
-    return common.APIResponse(fields=(('taxonomy', str),
+    return vendor.APIResponse(fields=(('taxonomy', str),
                                        ('tag', str),
                                        ('ccp', str),
                                        ('uom', str),
@@ -201,7 +201,7 @@ def _last_period():
     return f"CY{year - 1}Q4I" if month - 3 < 0 else f"CY{year}Q{ceil(4 * (month/12))}I"
 
 
-@common.register_endpoint(formatter=format_frame)
+@vendor.register_endpoint(formatter=format_frame)
 def get_frame(
         tag: str = 'Assets',
         period: str | None = None,

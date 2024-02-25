@@ -1,9 +1,26 @@
-from hedgepy.vendors import common
+from hedgepy.bases import vendor
 from hedgepy.vendors.fred import fred
 
-endpoint = common.APIEndpoint(getters=(fred.get_series,
-                                       fred.get_series_info,
-                                       fred.get_category,
-                                       fred.get_release),
-                              environment_variables=(common.APIEnvironmentVariable.from_dotenv('FRED_API_KEY'),),
-                              metadata=common.APIEndpointMetadata(date_format="%Y-%m-%d"))
+endpoint = vendor.APIEndpoint(getters=(fred.get_category,
+                                       fred.get_category_children,
+                                       fred.get_category_series,
+                                       fred.get_category_tags,
+                                       fred.get_releases, 
+                                       fred.get_releases_dates,
+                                       fred.get_release,
+                                       fred.get_release_dates,
+                                       fred.get_release_series,
+                                       fred.get_release_tags,
+                                       fred.get_release_tables,
+                                       fred.get_series,
+                                       fred.get_series_categories,
+                                       fred.get_series_observations,
+                                       fred.get_series_release,
+                                       fred.get_series_tags,
+                                       fred.get_series_updates,
+                                       fred.get_series_vintage_dates,
+                                       fred.get_sources,
+                                       fred.get_tags,
+                                       fred.get_tags_series),
+                              environment_variables=(vendor.APIEnvironmentVariable.from_dotenv('FRED_API_KEY'),),
+                              metadata=vendor.APIEndpointMetadata(date_format="%Y-%m-%d"))

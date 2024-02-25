@@ -5,16 +5,12 @@ description = "Add your description here"
 dependencies = [
     "requests>=2.31.0",
     "python-dotenv>=1.0.1",
-    "fastapi>=0.109.2",
     "psycopg[binary,pool]>=3.1.18",
     "pip>=24.0",
     "ibapi @ file:///home/ryan/app/staging/lib/ibkr",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
-
-[project.scripts]
-hello = "hedgepy:hello"
 
 [build-system]
 requires = ["hatchling"]
