@@ -15,15 +15,16 @@ QUERY_STUBS = {
     'insert_bulk': sql.SQL("COPY {}.{} ({}) FROM STDIN;"),
     'update': sql.SQL("UPDATE {}.{} SET ("), 
     'select': sql.SQL("SELECT ({}) FROM {}.{} "), 
+    'select_all': sql.SQL("SELECT * FROM {}.{} "),
     'delete_schema': sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE;"), 
     'delete_table': sql.SQL("DROP TABLE IF EXISTS {}.{} CASCADE;"),
     'delete_records': sql.SQL("DELETE FROM {}.{} ")
 }
 
 
-def parse_identifiers(schema: str | None, 
-                      table: str | None, 
-                      columns: str | None) -> tuple[sql.Identifier | sql.SQL | None]:
+def make_identifiers(schema: str | None, 
+                     table: str | None, 
+                     columns: str | None) -> tuple[sql.Identifier | sql.SQL | None]:
     schema = sql.Identifier(schema) if schema else schema
     table = sql.Identifier(table) if table else table
     columns = sql.SQL(', ').join(map(sql.Identifier, columns)) if columns else columns
@@ -33,7 +34,7 @@ def parse_identifiers(schema: str | None,
 def parse_response(response: APIFormattedResponse
                     ) -> tuple[tuple[sql.Identifier | sql.SQL], tuple[type], tuple[tuple]]:
     schema, table, columns = response.vendor_name, response.endpoint_name, response.fields
-    identifiers = parse_identifiers(schema=schema, table=table, columns=columns)
+    identifiers = make_identifiers(schema=schema, table=table, columns=columns)
     py_dtypes = tuple(map(lambda x: x[1], response.fields))
     return identifiers, py_dtypes, response.data
 
@@ -43,7 +44,10 @@ def validate_response_data(py_dtypes: tuple[type], data: tuple[tuple]) -> None:
     for record in data:
         for ix, (value, dtype) in enumerate(zip(record, py_dtypes)):
             if not isinstance(value, dtype):
-                raise TypeError(f"Value {value} at index {ix} is not of type {dtype}")
+                try: 
+                    value = dtype(value)
+                except ValueError:
+                    raise TypeError(f"Value {value} at index {ix} is not of type {dtype} and cannot be coerced")
             assert len(record) == record_len, f"Record {ix} has wrong length ({len(record)} / {record_len} expected)"
 
 
@@ -131,8 +135,14 @@ async def select(identifiers: tuple[tuple[sql.Identifier | sql.SQL]],
                  pool: AsyncConnectionPool, 
                  condition_columns: tuple[str] | None = None,
                  condition_values: tuple | Any | None = None) -> None:
-    query = _make_stub('select', identifiers)
-    query += _make_conditions(condition_columns, condition_values) + sql.SQL(';')
+    schema, table, columns = identifiers
+    if columns: 
+        query = _make_stub('select', identifiers)
+    else: 
+        query = _make_stub('select_all', identifiers)
+    if condition_columns and condition_values:
+        query += _make_conditions(condition_columns, condition_values) 
+    query += sql.SQL(';')
     return await _execute_query(query, pool, (condition_values,))
 
 
@@ -154,6 +164,8 @@ async def delete_records(identifiers: tuple[tuple[sql.Identifier | sql.SQL]],
                          condition_values: tuple | Any | None = None) -> None:
     schema, table, columns = identifiers
     query = _make_stub('delete_records', (schema, table))
-    query += _make_conditions(condition_columns, condition_values) + sql.SQL(';')
+    if condition_columns and condition_values:
+        query += _make_conditions(condition_columns, condition_values) 
+    query += sql.SQL(';')
     _execute_query(query, pool, (condition_values,))
  

@@ -1,4 +1,5 @@
 import asyncio
+from psycopg_pool import AsyncConnectionPool
 from pathlib import Path
 from importlib import import_module
 from typing import Callable, Literal
@@ -82,3 +83,9 @@ class RequestManager:
 
     def start(self):
         self._parent_loop.run_until_complete(self.run())
+
+
+class DatabaseManager:
+    def __init__(self):
+        self._pool = AsyncConnectionPool()
+        
