@@ -26,6 +26,7 @@ class APIEventLoop:
     start_fn_kwargs: dict | None = None
     stop_fn_args: tuple | None = None
     stop_fn_kwargs: dict | None = None
+    app = None
     
     def __post_init__(self):
         self.started = False
@@ -61,7 +62,7 @@ class APIEndpoint:
     app_constructor: Callable | None = None
     app_constructor_args: tuple | None = None
     app_constructor_kwargs: dict | None = None
-    loops: tuple[APIEventLoop] | None = None
+    loop: APIEventLoop | None = None
     getters: tuple[Callable] | None = None
     environment_variables: tuple[APIEnvironmentVariable] | None = None
     metadata: APIEndpointMetadata | None = None
@@ -161,10 +162,11 @@ class APIFormattedResponse:
                response: APIResponse, 
                vendor_name: str, 
                endpoint_name: str, 
-               table_type: Literal['wide', 'long'] | None = None
+               table_type: Literal['wide', 'long'] | None = None, 
+               fields: tuple[tuple[str, type]] | None = None
                ) -> 'APIFormattedResponse':
         return cls(data=response.data,
-                   fields=response.fields,  
+                   fields=fields,  
                    vendor_name=vendor_name, 
                    endpoint_name=endpoint_name, 
                    index=response.index,
@@ -225,7 +227,10 @@ def format_rest_response(response: requests.Response) -> tuple[tuple[Any]]:
 
 
 def register_endpoint(formatter: Callable[[requests.Response], APIResponse], 
-                      table_type: Literal['wide', 'long'] | None = None
+                      table_type: Literal['wide', 'long'] | None = None, 
+                      fields: tuple[tuple[str, type]] | None = None, 
+                      discard: tuple[str] | None = None,
+                      streaming: bool = False
                       ) -> Callable[..., APIFormattedResponse]:
     def decorator(endpoint: Callable[..., requests.Response]): 
         @wraps(endpoint)
@@ -233,8 +238,15 @@ def register_endpoint(formatter: Callable[[requests.Response], APIResponse],
             vendor_name: str = endpoint.__module__.split('.')[-1]
             endpoint_name: str = endpoint.__name__
             raw_response = endpoint(*args, **kwargs)            
+
             interim_response = formatter(raw_response)
-            final_response = APIFormattedResponse.format(interim_response, vendor_name, endpoint_name, table_type)
+
+            final_response = APIFormattedResponse.format(interim_response, 
+                                                         vendor_name, 
+                                                         endpoint_name, 
+                                                         table_type, 
+                                                         fields)
+
             return final_response
         return wrapper
     return decorator

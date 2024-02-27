@@ -144,7 +144,7 @@ class App(EWrapper, EClient):
     """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#delayed-market-data"""
     def tickPrice(self, reqId: TickerId, tickType: TickerId, price: float, attrib: TickAttrib) -> vendor.APIResponse:
         ticker = self._request_id_to_obj[reqId]['Contract'].symbol
-        return vendor.APIResponse(fields=(('ticker', str)
+        return vendor.APIResponse(fields=(('ticker', str),
                                           ('tick_type', int),
                                           ('price', float),
                                           ('attrib', str)), 
@@ -306,12 +306,27 @@ def format_response(response: vendor.APIResponse) -> vendor.APIResponse:
     return response
 
 
-@vendor.register_endpoint(formatter=format_response)
+@vendor.register_endpoint(formatter=format_response, 
+                          fields=(('account', str), 
+                                  ('tag', str), 
+                                  ('value', str), 
+                                  ('currency', str)))
 def get_account_summary(app: App, request_id: int, group: str = "All", tags: str = "All"):
     return app.request('req_account_summary', request_id, group, tags)
 
 
-@vendor.register_endpoint(formatter=format_response, table_type='wide')
+@vendor.register_endpoint(formatter=format_response, 
+                          table_type='wide', 
+                          fields=(('ticker', str),
+                                  ('date', int),
+                                  ('open', float),
+                                  ('high', float),
+                                  ('low', float),
+                                  ('close', float),
+                                  ('volume', int),
+                                  ('wap', float),
+                                  ('count', int)), 
+                          streaming=True)
 def get_realtime_bars(app: App, 
                       request_id: int, 
                       contract: Contract = TEST_CONTRACT, 
@@ -328,7 +343,18 @@ def get_realtime_bars(app: App,
                        [])
 
 
-@vendor.register_endpoint(formatter=format_response, table_type='wide')
+@vendor.register_endpoint(formatter=format_response, 
+                          table_type='wide', 
+                          fields=(('ticker', str),
+                                  ('date', int),
+                                  ('open', float),
+                                  ('high', float),
+                                  ('low', float),
+                                  ('close', float),
+                                  ('volume', int),
+                                  ('count', int),
+                                  ('wap', float),
+                                  ('has_gaps', bool)))
 def get_historical_data(app: App, 
                         request_id: int, 
                         contract: Contract = TEST_CONTRACT, 
@@ -351,7 +377,13 @@ def get_historical_data(app: App,
                        []) 
 
 
-@vendor.register_endpoint(formatter=format_response, table_type='wide')
+@vendor.register_endpoint(formatter=format_response, 
+                          table_type='wide', 
+                          fields=(('ticker', str),
+                                  ('time', str),
+                                  ('price', float),
+                                  ('size', int),
+                                  ('attrib', str)))
 def get_historical_ticks(app: App, 
                          request_id: int, 
                          contract: Contract = TEST_CONTRACT, 
@@ -389,3 +421,12 @@ def get_market_data(app: App,
 def get_contract_details(app: App, request_id: int, contract: Contract = TEST_CONTRACT):
     app._request_id_to_obj[request_id]['Contract'] = contract
     return app.request('req_contract_details', request_id, contract.make())
+
+
+def run(app: App):
+    app.run()
+    
+    
+def disconnect(app: App):
+    app.disconnect()
+    

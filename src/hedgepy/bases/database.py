@@ -169,3 +169,15 @@ async def delete_records(identifiers: tuple[tuple[sql.Identifier | sql.SQL]],
     query += sql.SQL(';')
     _execute_query(query, pool, (condition_values,))
  
+ 
+QUERIES = dict(zip(QUERY_STUBS.keys(), 
+                   (create_schema,
+                    create_table, 
+                    insert, 
+                    insert_bulk, 
+                    update, 
+                    select, 
+                    delete_schema, 
+                    delete_table, 
+                    delete_records)))
+ 
