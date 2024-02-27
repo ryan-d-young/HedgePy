@@ -248,5 +248,9 @@ def register_endpoint(formatter: Callable[[requests.Response], APIResponse],
                                                          fields)
 
             return final_response
+        
+        wrapper.discard = discard
+        wrapper.streaming = streaming
+        
         return wrapper
     return decorator

@@ -18,13 +18,26 @@ QUERY_STUBS = {
     'select_all': sql.SQL("SELECT * FROM {}.{} "),
     'delete_schema': sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE;"), 
     'delete_table': sql.SQL("DROP TABLE IF EXISTS {}.{} CASCADE;"),
-    'delete_records': sql.SQL("DELETE FROM {}.{} ")
+    'delete_records': sql.SQL("DELETE FROM {}.{} "), 
+    'check_table': sql.SQL("""
+                           SELECT EXISTS 
+                           (SELECT 1 FROM information_schema.tables WHERE table_schema = %s AND table_name = %s);
+                           """), 
+    'check_schema': sql.SQL("""
+                            SELECT EXISTS 
+                            (SELECT 1 FROM information_schema.schemata WHERE schema_name = %s);
+                            """),
+    'check_columns': sql.SQL("""
+                            SELECT column_name 
+                            FROM information_schema.columns 
+                            WHERE table_schema = %s AND table_name = %s;
+                            """)
 }
 
 
 def make_identifiers(schema: str | None, 
                      table: str | None, 
-                     columns: str | None) -> tuple[sql.Identifier | sql.SQL | None]:
+                     columns: tuple[str] | None) -> tuple[sql.Identifier | sql.SQL | None]:
     schema = sql.Identifier(schema) if schema else schema
     table = sql.Identifier(table) if table else table
     columns = sql.SQL(', ').join(map(sql.Identifier, columns)) if columns else columns
@@ -65,8 +78,7 @@ def _make_conditions(condition_columns: tuple[str],
 
 async def _execute_query(query: sql.SQL, 
                          pool: AsyncConnectionPool, 
-                         data: tuple[tuple] | None = None, 
-                         values: tuple[Any] | None = None) -> Any | None:
+                         data: tuple[tuple] | None = None) -> Any | None:
     async with pool.cursor() as cursor:
         if data:
             if len(data) > 1:
@@ -168,6 +180,24 @@ async def delete_records(identifiers: tuple[tuple[sql.Identifier | sql.SQL]],
         query += _make_conditions(condition_columns, condition_values) 
     query += sql.SQL(';')
     _execute_query(query, pool, (condition_values,))
+ 
+ 
+async def check_table(identifiers: tuple[sql.Identifier | sql.SQL], pool: AsyncConnectionPool) -> bool:
+    schema, table, columns = identifiers
+    query = _make_stub('check_table', (schema, table))
+    return await _execute_query(query, pool, (schema, table))
+
+
+async def check_schema(identifiers: tuple[sql.Identifier | sql.SQL], pool: AsyncConnectionPool) -> bool:
+    schema, table, columns = identifiers
+    query = _make_stub('check_schema', (schema,))
+    return await _execute_query(query, pool, (schema,))
+
+
+async def check_columns(identifiers: tuple[sql.Identifier | sql.SQL], pool: AsyncConnectionPool) -> tuple[str]:
+    schema, table, columns = identifiers
+    query = _make_stub('check_columns', (schema, table))
+    return await _execute_query(query, pool, (schema, table))
  
  
 QUERIES = dict(zip(QUERY_STUBS.keys(), 
