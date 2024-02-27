@@ -129,7 +129,7 @@ class APIResponseMetadata:
 class APIResponse:
     data: tuple[tuple[Any]]
     fields: tuple[tuple[str, type]]
-    corr_id: str 
+    corr_id: str | None = None
     index: str | tuple[str] | None = None
     metadata: APIResponseMetadata | None = None
     
