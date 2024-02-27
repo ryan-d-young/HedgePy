@@ -106,7 +106,7 @@ class DatabaseManager:
     def _bind_queries(self, pool: AsyncConnectionPool) -> dict[str, Callable]:
         queries = {}
         for query, func in QUERIES.items():
-            queries[query] = partial(func, pool=self.pool)
+            queries[query] = partial(func, pool=self._pool)
         return queries
     
     def query(self, query: str, *args, **kwargs):

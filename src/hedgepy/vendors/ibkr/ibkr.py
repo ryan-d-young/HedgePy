@@ -1,3 +1,4 @@
+import os
 import dotenv
 from pathlib import Path
 from decimal import Decimal
@@ -15,7 +16,7 @@ from ibapi.order import Order as IBOrder
 from hedgepy.bases import vendor
 
 
-_ENV_PATH = Path('.env')
+_ENV_PATH = Path(os.getcwd()) / '.env'
 _IBKR_IP = dotenv.get_key(_ENV_PATH, 'IBKR_IP')
 _IBKR_PORT = int(dotenv.get_key(_ENV_PATH, 'IBKR_PORT'))
 _IBKR_CLIENT_ID = int(dotenv.get_key(_ENV_PATH, 'IBKR_CLIENT_ID'))

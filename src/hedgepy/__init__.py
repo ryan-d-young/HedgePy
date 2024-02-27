@@ -1,9 +1,10 @@
 import os
+from pathlib import Path
 import asyncio
 from hedgepy import api
 
 
-root = os.getcwd()
+root = (Path(os.getcwd()) / 'src' / 'hedgepy').resolve()
 api = api.API(root)
 
 
@@ -13,3 +14,4 @@ def main():
     
 if __name__ == '__main__':
     main()
+    

@@ -48,7 +48,7 @@ class APIEndpointMetadata:
     time_format: str | None = None
     datetime_format: str | None = None
     
-    def __post__init__(self):
+    def __post_init__(self):
         if not self.date_format:
             self.date_format = '%Y-%m-%d'
         if not self.time_format:
@@ -131,7 +131,7 @@ class APIResponse:
     fields: tuple[tuple[str, type]]
     index: str | tuple[str] | None = None
     metadata: APIResponseMetadata | None = None
-    corr_id: str | None = None    
+    corr_id: str 
     
     def __post_init__(self):
         if not self.corr_id:
@@ -214,7 +214,7 @@ def format_rest_response(response: requests.Response) -> tuple[tuple[Any]]:
     for key, value in response.json(): 
         if isinstance(value, dict):
             record = (key, *tuple(value.values))
-        elif isinstance(value, list) | isinstance(value, tuple):
+        elif isinstance(value, list) or isinstance(value, tuple):
             record = (key, *value)
         else: 
             raise TypeError('Formatting failed due to incorrect record type:\n'
