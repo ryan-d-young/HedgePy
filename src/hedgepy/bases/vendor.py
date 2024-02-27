@@ -138,10 +138,11 @@ class APIResponse:
         if self.index:
             if isinstance(self.index, str):
                 self.index = (self.index,)
+        assert len(self.fields) == len(self.data[0]), "Fields and data have different lengths"
                 
 
-"""Note: due to the non-default argument 'metadata' in Response, we cannot subclass it under FormattedResponse"""
-"""as doing so clashes with the init logic for dataclass, so instead we 'manually' subclass by copy/pasting..."""
+"""Note: we cannot subclass APIResponse in APIFormattedResponse as doing so clashes with dataclass inheritance"""
+"""Unfortunately this means manually copiying APIResponse's __init__ signature before expanding upon it"""
 
 
 @dataclass
