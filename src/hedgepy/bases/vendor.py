@@ -129,9 +129,9 @@ class APIResponseMetadata:
 class APIResponse:
     data: tuple[tuple[Any]]
     fields: tuple[tuple[str, type]]
+    corr_id: str 
     index: str | tuple[str] | None = None
     metadata: APIResponseMetadata | None = None
-    corr_id: str 
     
     def __post_init__(self):
         if not self.corr_id:
