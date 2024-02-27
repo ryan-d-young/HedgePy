@@ -6,6 +6,7 @@ from typing import Callable
 from dataclasses import dataclass
 from collections import UserDict
 from functools import partial
+from uuid import uuid4, UUID
 
 from hedgepy.bases.vendor import APIEndpoint, APIEventLoop, APIFormattedResponse
 from hedgepy.bases.database import make_identifiers, parse_response, validate_response_data, QUERIES
@@ -26,6 +27,7 @@ class Task:
             self.args = ()
         if not self.kwargs:
             self.kwargs = {}
+        self.corr_id = uuid4()
 
 
 class ResponseManager(UserDict):
@@ -33,13 +35,17 @@ class ResponseManager(UserDict):
         super().__init__()
         self._lock = asyncio.Lock()
         
-    def __getitem__(self, key: APIFormattedResponse) -> APIFormattedResponse:
-        with self._lock:
+    async def __getitem__(self, key: APIFormattedResponse) -> APIFormattedResponse:
+        async with self._lock:
             super().__getitem__(key)
             
-    def __setitem__(self, key: APIFormattedResponse, value: APIFormattedResponse) -> None:
-        with self._lock:
+    async def __setitem__(self, key: APIFormattedResponse, value: APIFormattedResponse) -> None:
+        async with self._lock:
             super().__setitem__(key, value)      
+            
+    async def pop(self, key: APIFormattedResponse) -> Task:
+        async with self._lock:
+            return super().pop(key)
 
 
 class RequestManager:
@@ -49,6 +55,7 @@ class RequestManager:
         self._parent = parent
         self._task_queue_urgent = asyncio.PriorityQueue()
         self._task_queue_normal = asyncio.LifoQueue()
+        self._started = False
 
     def _put_queue(self, task: Task, urgent: bool = False):
         if urgent:
@@ -57,7 +64,9 @@ class RequestManager:
             self._task_queue_normal.put_nowait(task)
 
     async def _process_task(self, task: Task, queue: asyncio.Queue) -> APIFormattedResponse:
-        response = await self._parent.event_loop.run_in_executor(None, request, task)        
+        func = getattr(task.endpoint.getters, task.method)
+        func = partial(func, *task.args, **task.kwargs)
+        response = await self._parent.event_loop.run_in_executor(func=func)        
         queue.task_done()
         return response
 
@@ -77,12 +86,16 @@ class RequestManager:
         await asyncio.sleep(self.CYCLE_SLEEP_MS/1e3)
 
     async def run(self):
-        while True: 
+        while self._started: 
             await self.cycle()
 
-    def start(self):
-        self._parent_loop.run_until_complete(self.run())
-
+    async def start(self):
+        self._started = True
+        await self.run()
+        
+    async def stop(self):
+        self._started = False
+        
 
 class DatabaseManager:
     def __init__(self, parent: 'API'):
@@ -145,24 +158,23 @@ class DatabaseManager:
         return identifiers, data
     
     def check_existing_data(self, task: Task):
-        func = getattr(task.endpoint.getters, task.method)
-        match func.table_type:
-            case 'wide':
-                self._check_wide_table(task)
-            case 'long':
-                self._check_long_table(task)
-
+        raise NotImplementedError("To do")
+    
 
 class API:
+    WAIT_FOR_RESPONSE_MS = 1000
+
     def __init__(self, root: str):
         self.event_loop = asyncio.get_event_loop()
         self.vendors: dict[str, APIEndpoint] = self._load_vendors(Path(root) / 'vendors')
-        self._init_vendors()
 
         self._response_manager = ResponseManager()
         self._request_manager = RequestManager(self)
         self._database_manager = DatabaseManager(self)
 
+    async def start(self):
+        await self._init_vendors()
+        await self._request_manager.start()
         
     def _load_vendors(self, vendor_root: Path) -> dict[str, APIEndpoint]:
         vendors = {}                    
@@ -182,3 +194,15 @@ class API:
                 await self.event_loop.create_task(
                     endpoint.loop.start_fn(
                         *endpoint.loop.start_fn_args, **endpoint.loop.start_fn_kwargs))
+
+    def request(self, vendor: str, method: str, *args, **kwargs) -> UUID:
+        task = Task(endpoint=self.vendors[vendor], method=method, args=args, kwargs=kwargs)
+        self._request_manager._put_queue(task)
+        return task.corr_id
+    
+    async def response(self, corr_id: UUID) -> APIFormattedResponse:
+        try: 
+            return await self._response_manager.pop(corr_id)
+        except KeyError:
+            await asyncio.sleep(self.WAIT_FOR_RESPONSE_MS/1e3)
+            return await self.response(corr_id)
