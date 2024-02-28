@@ -1,7 +1,7 @@
 import datetime
 from psycopg import sql
 from psycopg_pool import AsyncConnectionPool
-from hedgepy.bases.vendor import APIFormattedResponse
+from hedgepy.bases.API import FormattedResponse
 from typing import Any
 
 DB_TYPE = ["text",  "bool", "null", "int", "float", "date", "time", "timestamp", "interval"]
@@ -42,26 +42,6 @@ def make_identifiers(schema: str | None,
     table = sql.Identifier(table) if table else table
     columns = sql.SQL(', ').join(map(sql.Identifier, columns)) if columns else columns
     return schema, table, columns
-
-
-def parse_response(response: APIFormattedResponse
-                    ) -> tuple[tuple[sql.Identifier | sql.SQL], tuple[type], tuple[tuple]]:
-    schema, table, columns = response.vendor_name, response.endpoint_name, response.fields
-    identifiers = make_identifiers(schema=schema, table=table, columns=columns)
-    py_dtypes = tuple(map(lambda x: x[1], response.fields))
-    return identifiers, py_dtypes, response.data
-
-
-def validate_response_data(py_dtypes: tuple[type], data: tuple[tuple]) -> None:
-    record_len = len(data[0])
-    for record in data:
-        for ix, (value, dtype) in enumerate(zip(record, py_dtypes)):
-            if not isinstance(value, dtype):
-                try: 
-                    value = dtype(value)
-                except ValueError:
-                    raise TypeError(f"Value {value} at index {ix} is not of type {dtype} and cannot be coerced")
-            assert len(record) == record_len, f"Record {ix} has wrong length ({len(record)} / {record_len} expected)"
 
 
 def _make_stub(which: str, identifiers: tuple[tuple[sql.Identifier | sql.SQL]]) -> sql.SQL:

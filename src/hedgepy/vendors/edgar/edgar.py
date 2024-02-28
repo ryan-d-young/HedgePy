@@ -1,21 +1,21 @@
 import dotenv
 from pathlib import Path
 from requests import Response
-from hedgepy.bases import vendor
+from hedgepy.bases import API
 
 
 _ENV_PATH = Path('.env')
 _COMPANY = dotenv.get_key(_ENV_PATH, 'EDGAR_COMPANY')
 _EMAIL = dotenv.get_key(_ENV_PATH, 'EDGAR_EMAIL')
 
-get_data = vendor.bind_rest_get(base_url='https://data.sec.gov', 
+get_data = API.bind_rest_get(base_url='https://data.sec.gov', 
                                 headers={'Accept': 'application/json',
                                          'Accept-Encoding': 'gzip, deflate',
                                          'Host': 'data.sec.gov', 
                                          'User-Agent': f'{_COMPANY} {_EMAIL}'})
 
 
-_get_tickers = vendor.bind_rest_get(base_url='https://www.sec.gov',
+_get_tickers = API.bind_rest_get(base_url='https://www.sec.gov',
                                     directory=('files', 'company_tickers.json'),
                                     headers={'Accept': 'application/json',
                                              'Accept-Encoding': 'gzip, deflate',
@@ -37,12 +37,12 @@ def format_tickers(response: Response) -> dict[str, dict[str, str]]:
         formatted_data += ((_sanitize_cik(record['cik_str']), 
                             record['ticker']),)
 
-    return vendor.APIResponse(fields=(('cik', str), 
+    return API.Response(fields=(('cik', str), 
                                       ('ticker', str)), 
                               data=formatted_data)
 
 
-@vendor.register_endpoint(formatter=format_tickers, table_type='wide')
+@API.register_endpoint(formatter=format_tickers, table_type='wide')
 def get_tickers():
     return _get_tickers()
 
@@ -54,7 +54,7 @@ CIK_MAP = {v: k for k, v in TICKER_MAP.items()}
 def format_submissions(response: Response) -> list[dict]:
     raw_data: dict = response.json()['filings']['recent']
     formatted_data = tuple()
-    metadata = vendor.APIResponseMetadata(request=response.request)
+    metadata = API.ResponseMetadata(request=response.request)
     cik = _sanitize_cik(metadata.url['directory'][-1][3:].split('.')[0])
     ticker = TICKER_MAP[cik]  
     
@@ -69,7 +69,7 @@ def format_submissions(response: Response) -> list[dict]:
                             raw_data['primaryDocument'][ix],
                             bool(raw_data['isXBRL'][ix])),)
     
-    return vendor.APIResponse(metadata=metadata,
+    return API.Response(metadata=metadata,
                               fields=(('ticker', str),
                                       ('form', str), 
                                       ('accession_number', str), 
@@ -83,7 +83,7 @@ def format_submissions(response: Response) -> list[dict]:
                               data=formatted_data)
 
 
-@vendor.register_endpoint(formatter=format_submissions, table_type='wide')
+@API.register_endpoint(formatter=format_submissions, table_type='wide')
 def get_submissions(ticker: str = 'AAPL') -> Response:
     cik = CIK_MAP[ticker]
     directory = ('submissions', f'CIK{cik}.json')
@@ -93,7 +93,7 @@ def get_submissions(ticker: str = 'AAPL') -> Response:
 def format_concept(response: Response) -> list[dict]:
     raw_data: dict = response.json()['units']
     formatted_data = tuple()
-    metadata = vendor.APIResponseMetadata(request=response.request)
+    metadata = API.ResponseMetadata(request=response.request)
     concept = metadata.url['directory'][-1].split('.')[0]
     cik = _sanitize_cik(metadata.url['directory'][-3][3:])
     ticker = TICKER_MAP[cik]
@@ -109,7 +109,7 @@ def format_concept(response: Response) -> list[dict]:
                                 record['val'], 
                                 record['accn']),)
 
-    return vendor.APIResponse(metadata=metadata,
+    return API.Response(metadata=metadata,
                               fields=(('ticker', str),
                                       ('concept', str),
                                       ('unit', str),
@@ -122,7 +122,7 @@ def format_concept(response: Response) -> list[dict]:
                               data=formatted_data)
 
 
-@vendor.register_endpoint(formatter=format_concept, table_type='wide')
+@API.register_endpoint(formatter=format_concept, table_type='wide')
 def get_concept(ticker: str = 'AAPL', tag: str = 'Assets') -> Response:
     cik = CIK_MAP[ticker]
     directory = ('api', 'xbrl', 'companyconcept', f'CIK{cik}', 'us-gaap', f'{tag}.json')
@@ -132,7 +132,7 @@ def get_concept(ticker: str = 'AAPL', tag: str = 'Assets') -> Response:
 def format_facts(response: Response):
     raw_data = response.json()['facts']
     formatted_data = tuple()
-    metadata = vendor.APIResponseMetadata(request=response.request)
+    metadata = API.ResponseMetadata(request=response.request)
     cik = _sanitize_cik(metadata.url['directory'][-1][3:].split('.')[0])
     ticker = TICKER_MAP[cik]
 
@@ -155,7 +155,7 @@ def format_facts(response: Response):
                                         record['form'], 
                                         record['filed']),)
 
-    return vendor.APIResponse(metadata=metadata,
+    return API.Response(metadata=metadata,
                               fields=(('ticker', str),
                                       ('taxonomy', str),
                                       ('line_item', str),
@@ -171,17 +171,17 @@ def format_facts(response: Response):
                               data=formatted_data)
 
 
-@vendor.register_endpoint(formatter=format_facts, table_type='wide')
+@API.register_endpoint(formatter=format_facts, table_type='wide')
 def get_facts(ticker: str = 'AAPL') -> Response:
     cik = CIK_MAP[ticker]
     directory = ('api', 'xbrl', 'companyfacts', f'CIK{cik}.json')
     return get_data(directory=directory)
 
 
-def format_frame(response: Response) -> vendor.APIFormattedResponse:
+def format_frame(response: Response) -> API.FormattedResponse:
     raw_data = response.json()
     formatted_data = tuple()
-    metadata = vendor.APIResponseMetadata(request=response.request)
+    metadata = API.ResponseMetadata(request=response.request)
     period = metadata.url['directory'][-1].split('.')[0]
     
     for record in raw_data['data']:
@@ -203,7 +203,7 @@ def format_frame(response: Response) -> vendor.APIFormattedResponse:
                             record['end'], 
                             record['val']),)
     
-    return vendor.APIResponse(metadata=metadata,
+    return API.Response(metadata=metadata,
                               fields=(('period', str),
                                       ('taxonomy', str),
                                       ('tag', str),
@@ -228,7 +228,7 @@ def _last_period():
     return f"CY{int(year) - 1}Q4I" if int(month) - 3 < 0 else f"CY{int(year)}Q{ceil(4 * (int(month)/12))}I"
 
 
-@vendor.register_endpoint(formatter=format_frame, table_type='wide')
+@API.register_endpoint(formatter=format_frame, table_type='wide')
 def get_frame(
         tag: str = 'Assets',
         period: str | None = None,

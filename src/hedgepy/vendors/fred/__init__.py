@@ -1,7 +1,7 @@
-from hedgepy.bases import vendor
+from hedgepy.bases import API
 from hedgepy.vendors.fred import fred
 
-endpoint = vendor.APIEndpoint(getters=(fred.get_category,
+endpoint = API.Endpoint(getters=(fred.get_category,
                                        fred.get_category_children,
                                        fred.get_category_series,
                                        fred.get_category_tags,
@@ -22,5 +22,5 @@ endpoint = vendor.APIEndpoint(getters=(fred.get_category,
                                        fred.get_sources,
                                        fred.get_tags,
                                        fred.get_tags_series),
-                              environment_variables=(vendor.APIEnvironmentVariable.from_dotenv('FRED_API_KEY'),),
-                              metadata=vendor.APIEndpointMetadata(date_format="%Y-%m-%d"))
+                              environment_variables=(API.EnvironmentVariable.from_dotenv('FRED_API_KEY'),),
+                              metadata=API.EndpointMetadata(date_format="%Y-%m-%d"))

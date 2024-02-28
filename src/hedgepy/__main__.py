@@ -6,12 +6,10 @@ from pathlib import Path
 from hedgepy import api
 
 
-ROOT = (Path(os.getcwd()) / 'src' / 'hedgepy').resolve()
-
-
 def main():
+    root = os.getcwd()
     password = getpass.getpass('Enter password: ')
-    api_instance = api.API(root=ROOT, password=password)
+    api_instance = api.API(root=root, password=password)
     del password
     
     asyncio.run(api_instance.start())

@@ -3,22 +3,19 @@ import dotenv
 from psycopg_pool import AsyncConnectionPool
 from pathlib import Path
 from importlib import import_module
-from typing import Callable
+from typing import Callable, Any
 from dataclasses import dataclass
 from collections import UserDict
 from functools import partial
 from uuid import uuid4, UUID
 
-from hedgepy.bases.vendor import APIEndpoint, APIEventLoop, APIFormattedResponse
-from hedgepy.bases.database import make_identifiers, parse_response, validate_response_data, QUERIES
+from hedgepy.bases import API
+from hedgepy.bases.database import make_identifiers, QUERIES
 
-
-
-    
 
 @dataclass
 class Task:
-    endpoint: APIEndpoint
+    endpoint: API.Endpoint
     method: str
     args: tuple | None = None
     kwargs: dict | None = None
@@ -36,15 +33,15 @@ class ResponseManager(UserDict):
         super().__init__()
         self._lock = asyncio.Lock()
         
-    async def __getitem__(self, key: APIFormattedResponse) -> APIFormattedResponse:
+    async def __getitem__(self, key: API.FormattedResponse) -> API.FormattedResponse:
         async with self._lock:
-            super().__getitem__(key)
+            return super().__getitem__(key)
             
-    async def __setitem__(self, key: APIFormattedResponse, value: APIFormattedResponse) -> None:
+    async def __setitem__(self, key: API.FormattedResponse, value: API.FormattedResponse) -> None:
         async with self._lock:
             super().__setitem__(key, value)      
             
-    async def pop(self, key: APIFormattedResponse) -> Task:
+    async def pop(self, key: API.FormattedResponse) -> Task:
         async with self._lock:
             return super().pop(key)
 
@@ -64,7 +61,7 @@ class RequestManager:
         else:
             self._task_queue_normal.put_nowait(task)
 
-    async def _process_task(self, task: Task, queue: asyncio.Queue) -> APIFormattedResponse:
+    async def _process_task(self, task: Task, queue: asyncio.Queue) -> API.FormattedResponse:
         func = getattr(task.endpoint.getters, task.method)
         func = partial(func, *task.args, **task.kwargs)
         response = await self._parent.event_loop.run_in_executor(func=func)        
@@ -81,7 +78,7 @@ class RequestManager:
     async def cycle(self):
         for queue in (self._task_queue_urgent, self._task_queue_normal):
             for task in self._poll_queue(queue):
-                response: APIFormattedResponse = await self._process_task(task, queue)
+                response: API.FormattedResponse = await self._process_task(task, queue)
                 self.response_manager[response] = response
 
         await asyncio.sleep(self.CYCLE_SLEEP_MS/1e3)
@@ -101,12 +98,13 @@ class RequestManager:
 class DatabaseManager:
     def __init__(self, parent: 'API', password: str):
         self._parent = parent
-        user = dotenv.get_key(Path(self._parent.ROOT) / '.env', 'SQL_USER')
-        host = dotenv.get_key(Path(self._parent.ROOT) / '.env', 'SQL_HOST')
-        port = dotenv.get_key(Path(self._parent.ROOT) / '.env', 'SQL_PORT')
-        dbname = dotenv.get_key(Path(self._parent.ROOT) / '.env', 'SQL_DBNAME')
+        user = dotenv.get_key(Path(self._parent._root) / '.env', 'SQL_USER')
+        host = dotenv.get_key(Path(self._parent._root) / '.env', 'SQL_HOST')
+        port = dotenv.get_key(Path(self._parent._root) / '.env', 'SQL_PORT')
+        dbname = dotenv.get_key(Path(self._parent._root) / '.env', 'SQL_DBNAME')
         self._pool =  AsyncConnectionPool(
-            conninfo=f"dbname={dbname} user={user} host={host} port={port} password={password}")
+            conninfo=f"dbname={dbname} user={user} host={host} port={port} password={password}", 
+            open=False)
         self.queries = self._bind_queries(self._pool)
                 
     def _bind_queries(self, pool: AsyncConnectionPool) -> dict[str, Callable]:
@@ -118,61 +116,55 @@ class DatabaseManager:
     def query(self, query: str, *args, **kwargs):
         return self.queries[query](*args, **kwargs)
     
-    def postprocess_response(self, response: APIFormattedResponse) -> tuple[tuple, tuple]:
-        identifiers, _, data = parse_response(response)
-        schema_name, table_name, _ = identifiers
-
+    def check_preexisting_data(self, endpoint: API.Endpoint, meth: str, *args, **kwargs
+                               ) -> tuple[tuple, tuple[tuple]] | None:
+        raise NotImplementedError("To do")
+    
+    def postprocess_response(self, response: API.FormattedResponse) -> tuple[tuple, tuple]:
         endpoint = self._parent.vendors[response.vendor_name]
         meth = getattr(endpoint.getters, response.endpoint_name)
-        fields_all, fields_discard = meth.fields, meth.discard
-        fields_out = ((field_name, field_dtype) for field_name, field_dtype in fields_all 
-                        if field_name not in fields_discard)
-        fields_out_names = tuple(map(lambda x: x[0], fields_out))
-        fields_out_dtypes = tuple(map(lambda x: x[1], fields_out))
-
-        if fields_discard:        
-            data_out = ()
-            discard_ix = tuple(map(lambda x: fields_out_names.index(x), fields_discard))
-            fields_out_names = tuple(filter(lambda x: x[0] not in fields_discard, enumerate(fields_out_names)))
-            fields_out_dtypes = tuple(filter(lambda x: x[0] not in discard_ix, enumerate(fields_out_dtypes)))
-            for record in data:
-                data_out += (tuple(filter(lambda x: x[0] not in discard_ix, enumerate(record))),)
-        else: 
-            data_out = data
-
-        return schema_name, table_name, fields_out_names, fields_out_dtypes, data
+        fields, data = response.fields, response.data
+        
+        if meth.discard:
+            fields, data = self._discard(response.fields, response.data, meth.discard)
             
-    def prepare_to_store_response(self, 
-                                  schema_name: str, 
-                                  table_name: str, 
-                                  fields_out_names: tuple[str], 
-                                  fields_out_dtypes: tuple[type], 
-                                  data: tuple[tuple]) -> tuple[tuple, tuple[tuple]]:        
-        schema, table, columns = make_identifiers(schema_name, table_name, fields_out_names)
+        return fields, data
 
+    def _discard(self, fields: tuple[tuple[str, type]], data: tuple[tuple], discard: tuple[str] | None
+                 ) -> tuple[tuple[str, type], tuple[tuple]]:
+        discard_ix = tuple(map(lambda x: fields.index(x), discard))
+        fields = tuple(filter(lambda x: x[0] not in discard_ix, enumerate(fields)))
+        data = tuple(filter(lambda x: x[0] not in discard_ix, enumerate(data)))
+        return fields, data
+            
+    def stage_response(self, response: API.FormattedResponse, dtypes: tuple[type], data: tuple[tuple]
+                       ) -> tuple[tuple, tuple[tuple]]:        
+        schema, table, columns = make_identifiers(schema=response.vendor_name, 
+                                                  table=response.endpoint_name, 
+                                                  columns=response.fields)
+                                
         schema_exists = self.query('check_schema', (schema,))
         if not schema_exists:
             self.query('create_schema', (schema,))
 
         table_exists = self.query('check_table', (schema, table))
         if not table_exists:
-            self.query('create_table', (schema, table, columns), fields_out_dtypes)            
+            self.query('create_table', (schema, table, columns), dtypes)            
 
-        validate_response_data(fields_out_dtypes, data)
+        return (schema, table, columns), data
+        
+    def start(self):
+        self._pool.open()
 
-        identifiers = schema, table, columns
-        return identifiers, data
-    
-    def check_existing_data(self, task: Task):
-        raise NotImplementedError("To do")
-    
 
 class API:
     WAIT_FOR_RESPONSE_MS = 1000
 
     def __init__(self, root: str, password: str):
+        self._root = root
+
         self.event_loop = asyncio.get_event_loop()
-        self.vendors: dict[str, APIEndpoint] = self._load_vendors(Path(root) / 'vendors')
+        self.vendors: dict[str, API.Endpoint] = self._load_vendors(Path(root) / 'src' / 'hedgepy' / 'vendors')
 
         self._response_manager = ResponseManager()
         self._request_manager = RequestManager(self)
@@ -181,8 +173,9 @@ class API:
     async def start(self):
         await self._init_vendors()
         await self._request_manager.start()
+        await self._database_manager.start()
         
-    def _load_vendors(self, vendor_root: Path) -> dict[str, APIEndpoint]:
+    def _load_vendors(self, vendor_root: Path) -> dict[str, API.Endpoint]:
         vendors = {}                    
         for vendor in vendor_root.iterdir():
             if vendor.is_dir() and not vendor.stem.startswith('_'):
@@ -193,20 +186,25 @@ class API:
         for endpoint in self.vendors.values():
             if endpoint.app_constructor and endpoint.loop:
                 app = endpoint.app_constructor(*endpoint.app_constructor_args, **endpoint.app_constructor_kwargs)
-                await self.event_loop.create_task(
-                    endpoint.loop.start_fn(
-                        app=app, *endpoint.loop.start_fn_args, **endpoint.loop.start_fn_kwargs))
+                await self.event_loop.run_in_executor(
+                    None,
+                    endpoint.loop.start_fn,
+                    app, 
+                    *endpoint.loop.start_fn_args, 
+                    **endpoint.loop.start_fn_kwargs)
             elif endpoint.loop:
-                await self.event_loop.create_task(
-                    endpoint.loop.start_fn(
-                        *endpoint.loop.start_fn_args, **endpoint.loop.start_fn_kwargs))
+                await self.event_loop.run_in_executor(
+                    None,
+                    endpoint.loop.start_fn,
+                    *endpoint.loop.start_fn_args, 
+                    **endpoint.loop.start_fn_kwargs)
 
     def request(self, vendor: str, method: str, *args, **kwargs) -> UUID:
         task = Task(endpoint=self.vendors[vendor], method=method, args=args, kwargs=kwargs)
         self._request_manager._put_queue(task)
         return task.corr_id
     
-    async def response(self, corr_id: UUID) -> APIFormattedResponse:
+    async def response(self, corr_id: UUID) -> API.FormattedResponse:
         try: 
             return await self._response_manager.pop(corr_id)
         except KeyError:

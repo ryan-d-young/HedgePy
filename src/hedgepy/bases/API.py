@@ -8,7 +8,7 @@ from uuid import uuid4
 
 
 @dataclass
-class APIEnvironmentVariable:
+class EnvironmentVariable:
     name: str
     value: str
     
@@ -19,7 +19,7 @@ class APIEnvironmentVariable:
 
 
 @dataclass
-class APIEventLoop:
+class EventLoop:
     start_fn: Callable
     stop_fn: Callable | None = None
     start_fn_args: tuple | None = None
@@ -30,6 +30,12 @@ class APIEventLoop:
     
     def __post_init__(self):
         self.started = False
+        for attr in ('start_fn_args', 'stop_fn_args'):
+            if not getattr(self, attr):
+                setattr(self, attr, ())
+        for attr in ('start_fn_kwargs', 'stop_fn_kwargs'):
+            if not getattr(self, attr):
+                setattr(self, attr, {})
 
     def start(self):
         if not self.started: 
@@ -43,7 +49,7 @@ class APIEventLoop:
 
 
 @dataclass
-class APIEndpointMetadata:
+class EndpointMetadata:
     date_format: str | None = None
     time_format: str | None = None
     datetime_format: str | None = None
@@ -58,18 +64,18 @@ class APIEndpointMetadata:
 
 
 @dataclass
-class APIEndpoint:
+class Endpoint:
     app_constructor: Callable | None = None
     app_constructor_args: tuple | None = None
     app_constructor_kwargs: dict | None = None
-    loop: APIEventLoop | None = None
+    loop: EventLoop | None = None
     getters: tuple[Callable] | None = None
-    environment_variables: tuple[APIEnvironmentVariable] | None = None
-    metadata: APIEndpointMetadata | None = None
+    environment_variables: tuple[EnvironmentVariable] | None = None
+    metadata: EndpointMetadata | None = None
     
     def __post_init__(self):
         if not self.metadata:
-            self.metadata = APIEndpointMetadata()
+            self.metadata = EndpointMetadata()
         if self.app_constructor and not self.app_constructor_args:
             self.app_constructor_args = ()
         if self.app_constructor and not self.app_constructor_kwargs:
@@ -79,7 +85,7 @@ class APIEndpoint:
     
 
 @dataclass
-class APIRequest:
+class Request:
     vendor: str
     endpoint: str
     args: tuple | None = None
@@ -96,7 +102,7 @@ class APIRequest:
 
 
 @dataclass
-class APIResponseMetadata:
+class ResponseMetadata:
     request: requests.PreparedRequest
     page: int = 0
     num_pages: int = 0
@@ -126,12 +132,12 @@ class APIResponseMetadata:
 
 
 @dataclass
-class APIResponse:
+class Response:
     data: tuple[tuple[Any]]
     fields: tuple[tuple[str, type]]
     corr_id: str | None = None
     index: str | tuple[str] | None = None
-    metadata: APIResponseMetadata | None = None
+    metadata: ResponseMetadata | None = None
     
     def __post_init__(self):
         if not self.corr_id:
@@ -147,24 +153,24 @@ class APIResponse:
 
 
 @dataclass
-class APIFormattedResponse:
+class FormattedResponse:
     data: tuple[tuple[Any]]
     fields: tuple[tuple[str, type]]
     vendor_name: str
     endpoint_name: str
     index: str | tuple[str] | None = None
-    metadata: APIResponseMetadata | None = None
+    metadata: ResponseMetadata | None = None
     corr_id: str | None = None
     table_type: Literal['wide', 'long'] | None = None
     
     @classmethod
     def format(cls, 
-               response: APIResponse, 
+               response: Response, 
                vendor_name: str, 
                endpoint_name: str, 
                table_type: Literal['wide', 'long'] | None = None, 
                fields: tuple[tuple[str, type]] | None = None
-               ) -> 'APIFormattedResponse':
+               ) -> 'FormattedResponse':
         return cls(data=response.data,
                    fields=fields,  
                    vendor_name=vendor_name, 
@@ -226,22 +232,22 @@ def format_rest_response(response: requests.Response) -> tuple[tuple[Any]]:
     return data
 
 
-def register_endpoint(formatter: Callable[[requests.Response], APIResponse], 
+def register_endpoint(formatter: Callable[[requests.Response], Response], 
                       table_type: Literal['wide', 'long'] | None = None, 
                       fields: tuple[tuple[str, type]] | None = None, 
                       discard: tuple[str] | None = None,
                       streaming: bool = False
-                      ) -> Callable[..., APIFormattedResponse]:
+                      ) -> Callable[..., FormattedResponse]:
     def decorator(endpoint: Callable[..., requests.Response]): 
         @wraps(endpoint)
-        def wrapper(*args, **kwargs) -> APIFormattedResponse:            
+        def wrapper(*args, **kwargs) -> FormattedResponse:            
             vendor_name: str = endpoint.__module__.split('.')[-1]
             endpoint_name: str = endpoint.__name__
             raw_response = endpoint(*args, **kwargs)            
 
             interim_response = formatter(raw_response)
 
-            final_response = APIFormattedResponse.format(interim_response, 
+            final_response = FormattedResponse.format(interim_response, 
                                                          vendor_name, 
                                                          endpoint_name, 
                                                          table_type, 
@@ -254,3 +260,15 @@ def register_endpoint(formatter: Callable[[requests.Response], APIResponse],
         
         return wrapper
     return decorator
+
+
+def validate_response_data(py_dtypes: tuple[type], data: tuple[tuple]) -> None:
+    record_len = len(data[0])
+    for record in data:
+        for ix, (value, dtype) in enumerate(zip(record, py_dtypes)):
+            if not isinstance(value, dtype):
+                try: 
+                    value = dtype(value)
+                except ValueError:
+                    raise TypeError(f"Value {value} at index {ix} is not of type {dtype} and cannot be coerced")
+            assert len(record) == record_len, f"Record {ix} has wrong length ({len(record)} / {record_len} expected)"

@@ -13,7 +13,7 @@ from ibapi.wrapper import EWrapper
 from ibapi.client import EClient
 from ibapi.order import Order as IBOrder
 
-from hedgepy.bases import vendor
+from hedgepy.bases import API
 
 
 _ENV_PATH = Path(os.getcwd()) / '.env'
@@ -58,8 +58,8 @@ class App(EWrapper, EClient):
                        account: str, 
                        tag: str, 
                        value: str, 
-                       currency: str) -> vendor.APIResponse:
-        return vendor.APIResponse(fields=(('account', str), 
+                       currency: str) -> API.Response:
+        return API.Response(fields=(('account', str), 
                                           ('tag', str), 
                                           ('value', str), 
                                           ('currency', str)), 
@@ -79,8 +79,8 @@ class App(EWrapper, EClient):
                     close: float, 
                     volume: int, 
                     wap: float, 
-                    count: int) -> vendor.APIResponse: 
-        return vendor.APIResponse(fields=(('ticker', str),
+                    count: int) -> API.Response: 
+        return API.Response(fields=(('ticker', str),
                                           ('date', int),
                                           ('open', float),
                                           ('high', float),
@@ -101,8 +101,8 @@ class App(EWrapper, EClient):
                                     corr_id=reqId)
 
     """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#hist-md"""
-    def historicalData(self, reqId: TickerId, bar: BarData) -> vendor.APIResponse: 
-        return vendor.APIResponse(fields=(('ticker', str),
+    def historicalData(self, reqId: TickerId, bar: BarData) -> API.Response: 
+        return API.Response(fields=(('ticker', str),
                                           ('date', int),
                                           ('open', float),
                                           ('high', float),
@@ -125,7 +125,7 @@ class App(EWrapper, EClient):
                                     corr_id=reqId)
 
     """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#requesting-time-and-sales"""
-    def historicalTicks(self, reqId: TickerId, ticks: TagValueList, done: bool) -> vendor.APIResponse:
+    def historicalTicks(self, reqId: TickerId, ticks: TagValueList, done: bool) -> API.Response:
         formatted_data = tuple()
         ticker = self._request_id_to_obj[reqId]['Contract'].symbol
         for tick in ticks:
@@ -134,7 +134,7 @@ class App(EWrapper, EClient):
                                 tick.price, 
                                 tick.size, 
                                 str(tick.attrib)),)
-        return vendor.APIResponse(fields=(('ticker', str), 
+        return API.Response(fields=(('ticker', str), 
                                            ('time', str),
                                            ('price', float),
                                            ('size', int),
@@ -143,9 +143,9 @@ class App(EWrapper, EClient):
                                   corr_id=reqId)
 
     """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#delayed-market-data"""
-    def tickPrice(self, reqId: TickerId, tickType: TickerId, price: float, attrib: TickAttrib) -> vendor.APIResponse:
+    def tickPrice(self, reqId: TickerId, tickType: TickerId, price: float, attrib: TickAttrib) -> API.Response:
         ticker = self._request_id_to_obj[reqId]['Contract'].symbol
-        return vendor.APIResponse(fields=(('ticker', str),
+        return API.Response(fields=(('ticker', str),
                                           ('tick_type', int),
                                           ('price', float),
                                           ('attrib', str)), 
@@ -153,22 +153,22 @@ class App(EWrapper, EClient):
                                     corr_id=reqId)
 
     """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#delayed-market-data"""
-    def tickSize(self, reqId: TickerId, tickType: TickerId, size: Decimal) -> vendor.APIResponse:
+    def tickSize(self, reqId: TickerId, tickType: TickerId, size: Decimal) -> API.Response:
         ticker = self._request_id_to_obj[reqId]['Contract'].symbol
-        return vendor.APIResponse(fields=(('ticker', str),
+        return API.Response(fields=(('ticker', str),
                                           ('tick_type', int),
                                           ('size', Decimal)),
                                   data=(ticker, tickType, size),
                                   corr_id=reqId)
 
     """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#request-contract-details"""
-    def contractDetails(self, reqId: TickerId, contractDetails: ContractDetails) -> vendor.APIResponse:
+    def contractDetails(self, reqId: TickerId, contractDetails: ContractDetails) -> API.Response:
         formatted_data = tuple()
         contract_ticker = self._request_id_to_obj[reqId]['Contract'].symbol
         for contract_detail in filter(lambda x: not x.startswith('_'), dir(contractDetails)):
             contract_value = getattr(contractDetails, contract_detail)
             formatted_data += ((contract_ticker, _camel_to_snake(contract_detail), contract_value),)
-        return vendor.APIResponse(fields=(('contract_ticker', str),
+        return API.Response(fields=(('contract_ticker', str),
                                           ('contract_detail', str),
                                           ('contract_value', Any)), 
                                   data=formatted_data, 
@@ -182,7 +182,7 @@ class App(EWrapper, EClient):
                                 price_increment.highEdge,
                                 price_increment.increment,
                                 marketRuleId),)
-        return vendor.APIResponse(fields=(('low_edge', float),
+        return API.Response(fields=(('low_edge', float),
                                           ('high_edge', float),
                                           ('increment', float),
                                           ('market_rule_id', int)), 
@@ -303,11 +303,11 @@ TEST_START_DATE = (datetime.now() - timedelta(days=1)).strftime(DTFMT)
 TEST_END_DATE = datetime.now().strftime(DTFMT)
 
 
-def format_response(response: vendor.APIResponse) -> vendor.APIResponse:
+def format_response(response: API.Response) -> API.Response:
     return response
 
 
-@vendor.register_endpoint(formatter=format_response, 
+@API.register_endpoint(formatter=format_response, 
                           fields=(('account', str), 
                                   ('tag', str), 
                                   ('value', str), 
@@ -316,7 +316,7 @@ def get_account_summary(app: App, request_id: int, group: str = "All", tags: str
     return app.request('req_account_summary', request_id, group, tags)
 
 
-@vendor.register_endpoint(formatter=format_response, 
+@API.register_endpoint(formatter=format_response, 
                           table_type='wide', 
                           fields=(('ticker', str),
                                   ('date', int),
@@ -344,7 +344,7 @@ def get_realtime_bars(app: App,
                        [])
 
 
-@vendor.register_endpoint(formatter=format_response, 
+@API.register_endpoint(formatter=format_response, 
                           table_type='wide', 
                           fields=(('ticker', str),
                                   ('date', int),
@@ -378,7 +378,7 @@ def get_historical_data(app: App,
                        []) 
 
 
-@vendor.register_endpoint(formatter=format_response, 
+@API.register_endpoint(formatter=format_response, 
                           table_type='wide', 
                           fields=(('ticker', str),
                                   ('time', str),
@@ -406,7 +406,7 @@ def get_historical_ticks(app: App,
                        [])
     
     
-@vendor.register_endpoint(formatter=format_response, table_type='wide')
+@API.register_endpoint(formatter=format_response, table_type='wide')
 def get_market_data(app: App, 
                     request_id: int, 
                     contract: Contract = TEST_CONTRACT, 
@@ -418,10 +418,14 @@ def get_market_data(app: App,
     return app.request('req_mkt_data', request_id, contract.make(), "", snapshot, False, tick_types)
 
 
-@vendor.register_endpoint(formatter=format_response)
+@API.register_endpoint(formatter=format_response)
 def get_contract_details(app: App, request_id: int, contract: Contract = TEST_CONTRACT):
     app._request_id_to_obj[request_id]['Contract'] = contract
     return app.request('req_contract_details', request_id, contract.make())
+
+
+def construct_app():
+    return App()
 
 
 def run(app: App):
