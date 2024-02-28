@@ -1,15 +1,20 @@
 import os
-from pathlib import Path
 import asyncio
+import argparse
+import getpass
+from pathlib import Path
 from hedgepy import api
 
 
-root = (Path(os.getcwd()) / 'src' / 'hedgepy').resolve()
-api = api.API(root)
+ROOT = (Path(os.getcwd()) / 'src' / 'hedgepy').resolve()
 
 
 def main():
-    asyncio.run(api.start())
+    password = getpass.getpass('Enter password: ')
+    api_instance = api.API(root=ROOT, password=password)
+    del password
+    
+    asyncio.run(api_instance.start())
     
     
 if __name__ == '__main__':

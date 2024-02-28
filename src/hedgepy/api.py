@@ -1,4 +1,5 @@
 import asyncio
+import dotenv
 from psycopg_pool import AsyncConnectionPool
 from pathlib import Path
 from importlib import import_module
@@ -12,7 +13,7 @@ from hedgepy.bases.vendor import APIEndpoint, APIEventLoop, APIFormattedResponse
 from hedgepy.bases.database import make_identifiers, parse_response, validate_response_data, QUERIES
 
 
-    
+
     
 
 @dataclass
@@ -98,10 +99,15 @@ class RequestManager:
         
 
 class DatabaseManager:
-    def __init__(self, parent: 'API'):
+    def __init__(self, parent: 'API', password: str):
         self._parent = parent
-        self._pool = pool = AsyncConnectionPool()
-        self.queries = self._bind_queries(pool)
+        user = dotenv.get_key(Path(self._parent.ROOT) / '.env', 'SQL_USER')
+        host = dotenv.get_key(Path(self._parent.ROOT) / '.env', 'SQL_HOST')
+        port = dotenv.get_key(Path(self._parent.ROOT) / '.env', 'SQL_PORT')
+        dbname = dotenv.get_key(Path(self._parent.ROOT) / '.env', 'SQL_DBNAME')
+        self._pool =  AsyncConnectionPool(
+            conninfo=f"dbname={dbname} user={user} host={host} port={port} password={password}")
+        self.queries = self._bind_queries(self._pool)
                 
     def _bind_queries(self, pool: AsyncConnectionPool) -> dict[str, Callable]:
         queries = {}
@@ -164,13 +170,13 @@ class DatabaseManager:
 class API:
     WAIT_FOR_RESPONSE_MS = 1000
 
-    def __init__(self, root: str):
+    def __init__(self, root: str, password: str):
         self.event_loop = asyncio.get_event_loop()
         self.vendors: dict[str, APIEndpoint] = self._load_vendors(Path(root) / 'vendors')
 
         self._response_manager = ResponseManager()
         self._request_manager = RequestManager(self)
-        self._database_manager = DatabaseManager(self)
+        self._database_manager = DatabaseManager(self, password)
 
     async def start(self):
         await self._init_vendors()
