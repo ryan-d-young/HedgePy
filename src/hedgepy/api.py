@@ -158,7 +158,8 @@ class DatabaseManager:
 
 
 class API:
-    WAIT_FOR_RESPONSE_MS = 1000
+    RETRY_MS = 1000
+    MAX_RETRIES = 60
 
     def __init__(self, root: str, password: str):
         self._root = root
@@ -169,6 +170,8 @@ class API:
         self._response_manager = ResponseManager()
         self._request_manager = RequestManager(self)
         self._database_manager = DatabaseManager(self, password)
+        
+        self._retries: dict[UUID, int] = {}
 
     async def start(self):
         await self._init_vendors()
@@ -203,10 +206,19 @@ class API:
         task = Task(endpoint=self.vendors[vendor], method=method, args=args, kwargs=kwargs)
         self._request_manager._put_queue(task)
         return task.corr_id
+
+    def _check_retries(self, corr_id: UUID) -> None:
+        if corr_id in self._retries:
+            retries = self._retries[corr_id] = self._retries[corr_id] + 1
+            if retries > self.MAX_RETRIES:
+                raise ValueError(f"Fetching response {corr_id} has exceeded the maximum number of retries")
+        else:
+            self._retries[corr_id] = 1
     
     async def response(self, corr_id: UUID) -> API.FormattedResponse:
         try: 
             return await self._response_manager.pop(corr_id)
         except KeyError:
-            await asyncio.sleep(self.WAIT_FOR_RESPONSE_MS/1e3)
+            self._retries = self._check_retries(corr_id)
+            await asyncio.sleep(self.RETRY_MS/1e3)
             return await self.response(corr_id)
