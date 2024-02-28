@@ -49,8 +49,8 @@ class ResponseManager(UserDict):
 class RequestManager:
     CYCLE_SLEEP_MS = 50
     
-    def __init__(self, parent: 'API'):
-        self._parent = parent
+    def __init__(self, api_instance: 'API_Instance'):
+        self._api_instance = api_instance
         self._task_queue_urgent = asyncio.PriorityQueue()
         self._task_queue_normal = asyncio.LifoQueue()
         self._started = False
@@ -62,9 +62,8 @@ class RequestManager:
             self._task_queue_normal.put_nowait(task)
 
     async def _process_task(self, task: Task, queue: asyncio.Queue) -> API.FormattedResponse:
-        func = getattr(task.endpoint.getters, task.method)
-        func = partial(func, *task.args, **task.kwargs)
-        response = await self._parent.event_loop.run_in_executor(func=func)        
+        func = partial(getattr(task.endpoint.getters, task.method), *task.args, **task.kwargs)
+        response = await self._api_instance.event_loop.run_in_executor(func=func)        
         queue.task_done()
         return response
 
@@ -77,9 +76,9 @@ class RequestManager:
     
     async def cycle(self):
         for queue in (self._task_queue_urgent, self._task_queue_normal):
-            for task in self._poll_queue(queue):
+            while task := self._poll_queue(queue):
                 response: API.FormattedResponse = await self._process_task(task, queue)
-                self.response_manager[response] = response
+                self._api_instance.response_manager[response] = response
 
         await asyncio.sleep(self.CYCLE_SLEEP_MS/1e3)
 
@@ -96,12 +95,12 @@ class RequestManager:
         
 
 class DatabaseManager:
-    def __init__(self, parent: 'API', password: str):
-        self._parent = parent
-        user = dotenv.get_key(Path(self._parent._root) / '.env', 'SQL_USER')
-        host = dotenv.get_key(Path(self._parent._root) / '.env', 'SQL_HOST')
-        port = dotenv.get_key(Path(self._parent._root) / '.env', 'SQL_PORT')
-        dbname = dotenv.get_key(Path(self._parent._root) / '.env', 'SQL_DBNAME')
+    def __init__(self, api_instance: 'API_Instance', password: str):
+        self._api_instance = api_instance
+        user = dotenv.get_key(Path(self._api_instance._root) / '.env', 'SQL_USER')
+        host = dotenv.get_key(Path(self._api_instance._root) / '.env', 'SQL_HOST')
+        port = dotenv.get_key(Path(self._api_instance._root) / '.env', 'SQL_PORT')
+        dbname = dotenv.get_key(Path(self._api_instance._root) / '.env', 'SQL_DBNAME')
         self._pool =  AsyncConnectionPool(
             conninfo=f"dbname={dbname} user={user} host={host} port={port} password={password}", 
             open=False)
@@ -121,7 +120,7 @@ class DatabaseManager:
         raise NotImplementedError("To do")
     
     def postprocess_response(self, response: API.FormattedResponse) -> tuple[tuple, tuple]:
-        endpoint = self._parent.vendors[response.vendor_name]
+        endpoint = self._api_instance.vendors[response.vendor_name]
         meth = getattr(endpoint.getters, response.endpoint_name)
         fields, data = response.fields, response.data
         
@@ -157,7 +156,7 @@ class DatabaseManager:
         self._pool.open()
 
 
-class API:
+class API_Instance:
     RETRY_MS = 1000
     MAX_RETRIES = 60
 
