@@ -1,5 +1,6 @@
 import asyncio
 import dotenv
+import datetime
 from psycopg_pool import AsyncConnectionPool
 from pathlib import Path
 from importlib import import_module
@@ -80,6 +81,7 @@ class RequestManager:
                 response: API.FormattedResponse = await self._process_task(task, queue)
                 self._api_instance.response_manager[response] = response
 
+        print(f"cycle: {datetime.datetime.now()}")
         await asyncio.sleep(self.CYCLE_SLEEP_MS/1e3)
 
     async def run(self):
@@ -152,8 +154,9 @@ class DatabaseManager:
 
         return (schema, table, columns), data
         
-    def start(self):
-        self._pool.open()
+    async def start(self):
+        print(f"DatabaseManager.start: {asyncio.get_event_loop()}")
+        await self._pool.open()
 
 
 class API_Instance:
@@ -162,8 +165,8 @@ class API_Instance:
 
     def __init__(self, root: str, password: str):
         self._root = root
-
-        self.event_loop = asyncio.get_event_loop()
+        self._event_loop = None
+        
         self.vendors: dict[str, API.Endpoint] = self._load_vendors(Path(root) / 'src' / 'hedgepy' / 'vendors')
 
         self._response_manager = ResponseManager()
@@ -173,9 +176,11 @@ class API_Instance:
         self._retries: dict[UUID, int] = {}
 
     async def start(self):
+        self._event_loop = asyncio.get_event_loop()
+        print(f"API_Instance.start: {self._event_loop}")
         await self._init_vendors()
-        await self._request_manager.start()
         await self._database_manager.start()
+        await self._request_manager.start()
         
     def _load_vendors(self, vendor_root: Path) -> dict[str, API.Endpoint]:
         vendors = {}                    
@@ -188,14 +193,14 @@ class API_Instance:
         for endpoint in self.vendors.values():
             if endpoint.app_constructor and endpoint.loop:
                 app = endpoint.app_constructor(*endpoint.app_constructor_args, **endpoint.app_constructor_kwargs)
-                await self.event_loop.run_in_executor(
+                await self._event_loop.run_in_executor(
                     None,
                     endpoint.loop.start_fn,
                     app, 
                     *endpoint.loop.start_fn_args, 
                     **endpoint.loop.start_fn_kwargs)
             elif endpoint.loop:
-                await self.event_loop.run_in_executor(
+                await self._event_loop.run_in_executor(
                     None,
                     endpoint.loop.start_fn,
                     *endpoint.loop.start_fn_args, 

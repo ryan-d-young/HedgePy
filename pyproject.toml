@@ -8,6 +8,7 @@ dependencies = [
     "psycopg[binary,pool]>=3.1.18",
     "pip>=24.0",
     "ibapi @ file:///home/ryan/app/staging/lib/ibkr",
+    "textual>=0.52.1",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
@@ -20,6 +21,7 @@ build-backend = "hatchling.build"
 managed = true
 dev-dependencies = [
     "ipython>=8.12.3",
+    "textual-dev>=1.5.1",
 ]
 
 [tool.hatch.metadata]

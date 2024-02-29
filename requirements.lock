@@ -16,6 +16,17 @@ ibapi @ file:///home/ryan/app/staging/lib/ibkr
     # via hedgepy
 idna==3.6
     # via requests
+linkify-it-py==2.0.3
+    # via markdown-it-py
+markdown-it-py==3.0.0
+    # via markdown-it-py
+    # via mdit-py-plugins
+    # via rich
+    # via textual
+mdit-py-plugins==0.4.0
+    # via markdown-it-py
+mdurl==0.1.2
+    # via markdown-it-py
 psycopg==3.1.18
     # via hedgepy
     # via psycopg
@@ -23,13 +34,22 @@ psycopg-binary==3.1.18
     # via psycopg
 psycopg-pool==3.2.1
     # via psycopg
+pygments==2.17.2
+    # via rich
 python-dotenv==1.0.1
     # via hedgepy
 requests==2.31.0
     # via hedgepy
+rich==13.7.1
+    # via textual
+textual==0.52.1
+    # via hedgepy
 typing-extensions==4.9.0
     # via psycopg
     # via psycopg-pool
+    # via textual
+uc-micro-py==1.0.3
+    # via linkify-it-py
 urllib3==2.2.0
     # via requests
 pip==24.0
