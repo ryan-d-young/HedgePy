@@ -12,7 +12,6 @@ def main():
     api_instance = api.API_Instance(root=root, password=password)
     del password
     
-    
     asyncio.run(api_instance.start())
     
     

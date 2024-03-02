@@ -1,5 +1,7 @@
 import os
 import dotenv
+import asyncio
+import socket
 from pathlib import Path
 from decimal import Decimal
 from functools import reduce
@@ -7,10 +9,14 @@ from dataclasses import dataclass
 from typing import Any, Literal
 from datetime import datetime, timedelta
 
+from ibapi import comm
 from ibapi.common import BarData, TagValueList, TickAttrib, TickerId
 from ibapi.contract import Contract as IBContract, ContractDetails
 from ibapi.wrapper import EWrapper
 from ibapi.client import EClient
+from ibapi.reader import EReader
+from ibapi.connection import Connection as _Connection
+from ibapi.decoder import Decoder
 from ibapi.order import Order as IBOrder
 
 from hedgepy.bases import API
@@ -37,18 +43,139 @@ def _camel_to_snake(meth: str):
         ).replace(' ', '_')
 
 
-class App(EWrapper, EClient):
+class Connection(_Connection):
+    def __init__(self, host: str, port: int):
+        self.host = host
+        self.port = port
+        self.socket = None
+        self.wrapper = None
+        self.lock = asyncio.Lock()
+
+    async def connect(self):
+        self.socket = socket.socket()
+        try:
+            await asyncio.get_event_loop().sock_connect(self.socket, (self.host, self.port))
+        except Exception as e:
+            print(f"Failed to connect: {e}")
+            return
+        self.socket.setblocking(False)
+        print("Connected successfully")
+        
+    async def disconnect(self):
+        async with self.lock:
+            if self.isConnected():
+                self.socket.close()
+                self.socket = None
+                if self.wrapper:
+                    self.wrapper.connectionClosed()
+        
+        
+    async def sendMsg(self, msg):
+        async with self.lock: 
+            self.socket.send(msg)
+            
+    async def recvMsg(self):
+        buffer = await self._recvAllMsg()
+        
+        if len(buffer) == 0:
+            await self.disconnect()
+        
+        return buffer
+        
+    async def _recvAllMsg(self):
+        cont = True
+        buffer = b""
+        
+        while cont and self.isConnected():
+            data = await asyncio.get_event_loop().sock_recv(self.socket, 4096)
+            buffer += data
+            
+            if len(buffer) < 4096:
+                cont = False
+                
+        return buffer
+    
+
+class Reader(EReader):       
+    async def run(self):
+        buffer = b""
+        while self.conn.isConnected():
+            data = self.conn.recvMsg()
+            buffer += data
+            while len(buffer) > 0:
+                _, msg, buffer = comm.read_msg(buffer)
+                if msg:
+                    await self.msg_queue.put(msg)
+                else:
+                    break
+            
+            
+class Client(EClient):
+    async def connect(self, host: str, port: int, clientId: int):
+        self.host = host
+        self.port = port
+        self.clientId = clientId
+        
+        self.conn = Connection(self.host, self.port)
+        await self.conn.connect()
+        self.setConnState(EClient.CONNECTING)
+        
+        version_msg = comm.make_msg("v%d..%d" % (100, 176))
+        prefix_msg = str.encode("API\0", 'ascii') + version_msg
+        await self.conn.sendMsg(prefix_msg)
+        
+        self.decoder = Decoder(self.wrapper, self.serverVersion())
+        fields = []
+        
+        while len(fields) != 2:
+            self.decoder.interpret(fields)
+            buffer = await self.conn.recvMsg()
+            if not self.conn.isConnected():
+                self.reset()
+                return
+            if len(buffer) > 0:
+                size, msg, rest = comm.read_msg(buffer)
+                fields = comm.read_fields(msg)
+        
+        server_version, conn_time = fields
+        server_version = int(server_version)
+        self.connTime = conn_time
+        self.serverVersion_ = server_version
+        self.decoder.serverVersion = server_version
+        
+        self.setConnState(EClient.CONNECTED)    
+        
+        self.reader = Reader(self.conn, self.msg_queue)
+        await asyncio.to_thread(self.reader.start())
+        self.startApi()
+        self.wrapper.connectAck()
+
+
+class App(EWrapper, Client):
     def __init__(self): 
         EWrapper.__init__(self)
-        EClient.__init__(self, wrapper=self)
-
-        self.connect(_IBKR_IP, _IBKR_PORT, _IBKR_CLIENT_ID)
-        self.startApi()
-        
+        Client.__init__(self, wrapper=self)        
         self._request_id_to_obj: dict[str | int, dict[Literal['Order', 'Contract'], IBOrder, IBContract]] = {}
 
     def request(self, meth: str, *args, **kwargs):
         return getattr(super(), _snake_to_camel(meth))(*args, **kwargs)
+    
+    async def run(self):
+        print(f"Before while loop: isConnected={self.isConnected()}, queue empty={self.msg_queue.empty()}")
+        if not self.isConnected():
+            await self.connect(_IBKR_IP, _IBKR_PORT, _IBKR_CLIENT_ID)
+        while self.isConnected() or not self.msg_queue.empty():
+            print("Inside while loop")
+            try: 
+                print("IBKR cycle")
+                msg = self.msg_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                print("Queue is empty, sleeping")
+                await asyncio.sleep(50/1e3)
+                continue
+            else: 
+                fields = comm.read_fields(msg)
+                self.decoder.interpret(fields)
         
     """The below functions override superclass methods and will never be called directly"""
 
@@ -187,6 +314,8 @@ class App(EWrapper, EClient):
                                           ('increment', float),
                                           ('market_rule_id', int)), 
                                   data=formatted_data)
+        
+
 
 
 @dataclass
@@ -286,14 +415,6 @@ class Order(_IBObj):
 
     def make(self) -> IBOrder:
         return super().make(IBOrder)
-
-
-def run(app: App):
-    app.run()
-    
-
-def stop(app: App):
-    app.disconnect()
 
 
 TEST_CONTRACT = Contract(symbol="AAPL", sec_type="STK", exchange="SMART", currency="USD")
@@ -428,8 +549,8 @@ def construct_app():
     return App()
 
 
-def run(app: App):
-    app.run()
+async def run(app: App):
+    return await app.run()
     
     
 def disconnect(app: App):

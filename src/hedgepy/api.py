@@ -193,18 +193,20 @@ class API_Instance:
         for endpoint in self.vendors.values():
             if endpoint.app_constructor and endpoint.loop:
                 app = endpoint.app_constructor(*endpoint.app_constructor_args, **endpoint.app_constructor_kwargs)
-                await self._event_loop.run_in_executor(
-                    None,
-                    endpoint.loop.start_fn,
-                    app, 
-                    *endpoint.loop.start_fn_args, 
-                    **endpoint.loop.start_fn_kwargs)
+                asyncio.create_task(
+                    endpoint.loop.start_fn(
+                        app, 
+                        *endpoint.loop.start_fn_args, 
+                        **endpoint.loop.start_fn_kwargs
+                    )
+                )
             elif endpoint.loop:
-                await self._event_loop.run_in_executor(
-                    None,
-                    endpoint.loop.start_fn,
-                    *endpoint.loop.start_fn_args, 
-                    **endpoint.loop.start_fn_kwargs)
+                asyncio.create_task(
+                    endpoint.loop.start_fn(
+                        *endpoint.loop.start_fn_args, 
+                        **endpoint.loop.start_fn_kwargs
+                    )
+                )
 
     def request(self, vendor: str, method: str, *args, **kwargs) -> UUID:
         task = Task(endpoint=self.vendors[vendor], method=method, args=args, kwargs=kwargs)
