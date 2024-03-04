@@ -14,7 +14,7 @@ from ibapi.common import BarData, TagValueList, TickAttrib, TickerId
 from ibapi.contract import Contract as IBContract, ContractDetails
 from ibapi.wrapper import EWrapper
 from ibapi.client import EClient
-from ibapi.reader import EReader
+# from ibapi.reader import EReader
 from ibapi.connection import Connection as _Connection
 from ibapi.decoder import Decoder
 from ibapi.order import Order as IBOrder
@@ -59,7 +59,7 @@ class Connection(_Connection):
             print(f"Failed to connect: {e}")
             return
         self.socket.setblocking(False)
-        print("Connected successfully")
+        print("Connection connected")
         
     async def disconnect(self):
         async with self.lock:
@@ -96,21 +96,31 @@ class Connection(_Connection):
         return buffer
     
 
-class Reader(EReader):       
+class Reader:       
+    def __init__(self, conn: Connection, msg_queue):
+        self.conn = conn
+        self.msg_queue = msg_queue
+    
     async def run(self):
         buffer = b""
         while self.conn.isConnected():
-            data = self.conn.recvMsg()
+            data = await self.conn.recvMsg()
             buffer += data
             while len(buffer) > 0:
                 _, msg, buffer = comm.read_msg(buffer)
                 if msg:
                     await self.msg_queue.put(msg)
                 else:
-                    break
+                    asyncio.sleep(50/1e3)
             
             
 class Client(EClient):
+    def __init__(self, wrapper: EWrapper):
+        self.msg_queue = asyncio.Queue()
+        self.wrapper = wrapper
+        self.decoder = None
+        self.reset()
+    
     async def connect(self, host: str, port: int, clientId: int):
         self.host = host
         self.port = port
@@ -146,7 +156,7 @@ class Client(EClient):
         self.setConnState(EClient.CONNECTED)    
         
         self.reader = Reader(self.conn, self.msg_queue)
-        await asyncio.to_thread(self.reader.start())
+        asyncio.create_task(self.reader.run())
         self.startApi()
         self.wrapper.connectAck()
 
@@ -161,11 +171,9 @@ class App(EWrapper, Client):
         return getattr(super(), _snake_to_camel(meth))(*args, **kwargs)
     
     async def run(self):
-        print(f"Before while loop: isConnected={self.isConnected()}, queue empty={self.msg_queue.empty()}")
         if not self.isConnected():
             await self.connect(_IBKR_IP, _IBKR_PORT, _IBKR_CLIENT_ID)
         while self.isConnected() or not self.msg_queue.empty():
-            print("Inside while loop")
             try: 
                 print("IBKR cycle")
                 msg = self.msg_queue.get_nowait()
@@ -174,6 +182,7 @@ class App(EWrapper, Client):
                 await asyncio.sleep(50/1e3)
                 continue
             else: 
+                print("Processing message")
                 fields = comm.read_fields(msg)
                 self.decoder.interpret(fields)
         
@@ -550,7 +559,7 @@ def construct_app():
 
 
 async def run(app: App):
-    return await app.run()
+    await app.run()
     
     
 def disconnect(app: App):
