@@ -1,0 +1,72 @@
+{
+    "additionalProperties": false,
+    "properties": {
+        "end": {
+            "format": "date",
+            "type": "string"
+        },
+        "orientation": {
+            "default": "wide",
+            "enum": [
+                "wide",
+                "long"
+            ]
+        },
+        "resolution": {
+            "format": "duration",
+            "type": "string"
+        },
+        "start": {
+            "format": "date",
+            "type": "string"
+        },
+        "template": {
+            "items": {
+                "additionalProperties": false,
+                "properties": {
+                    "end": {
+                        "format": "date-time",
+                        "type": "string"
+                    },
+                    "endpoint": {
+                        "type": "string"
+                    },
+                    "fields": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array"
+                    },
+                    "resolution": {
+                        "format": "date-time",
+                        "type": "string"
+                    },
+                    "start": {
+                        "format": "date-time",
+                        "type": "string"
+                    },
+                    "symbols": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array"
+                    },
+                    "vendor": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "vendor",
+                    "endpoint"
+                ],
+                "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+        }
+    },
+    "required": [
+        "template"
+    ],
+    "type": "object"
+}

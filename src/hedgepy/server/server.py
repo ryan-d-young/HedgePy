@@ -1,6 +1,8 @@
 import asyncio
 import dotenv
 import datetime
+import json
+from aiohttp import web
 from psycopg_pool import AsyncConnectionPool
 from pathlib import Path
 from importlib import import_module
@@ -10,7 +12,7 @@ from collections import UserDict
 from functools import partial
 from uuid import uuid4, UUID
 
-from hedgepy.common import API
+from hedgepy.common import API, template
 from hedgepy.common.database import make_identifiers, QUERIES
 
 
@@ -80,6 +82,7 @@ class RequestManager:
             while task := self._poll_queue(queue):
                 response: API.FormattedResponse = await self._process_task(task, queue)
                 self._api_instance.response_manager[response] = response
+                await asyncio.sleep(0)
 
         print(f"cycle: {datetime.datetime.now()}")
         await asyncio.sleep(self.CYCLE_SLEEP_MS/1e3)
@@ -99,6 +102,7 @@ class RequestManager:
 class DatabaseManager:
     def __init__(self, api_instance: 'API_Instance', password: str):
         self._api_instance = api_instance
+
         user = dotenv.get_key(Path(self._api_instance._root) / '.env', 'SQL_USER')
         host = dotenv.get_key(Path(self._api_instance._root) / '.env', 'SQL_HOST')
         port = dotenv.get_key(Path(self._api_instance._root) / '.env', 'SQL_PORT')
@@ -106,6 +110,8 @@ class DatabaseManager:
         self._pool =  AsyncConnectionPool(
             conninfo=f"dbname={dbname} user={user} host={host} port={port} password={password}", 
             open=False)
+        del password
+
         self.queries = self._bind_queries(self._pool)
                 
     def _bind_queries(self, pool: AsyncConnectionPool) -> dict[str, Callable]:
@@ -159,13 +165,35 @@ class DatabaseManager:
         await self._pool.open()
 
 
+class ServerManager:
+    def __init__(self, api_instance: 'API_Instance'):
+        self._api_instance = api_instance
+        self._web_server = self._init_web_server()
+        
+    def _init_web_server(self):
+        app = web.Application()
+        app.router.add_post('/api', self._api_instance.request)
+        return app
+        
+    async def start(self):
+        runner = web.AppRunner(self._web_server)
+        await runner.setup()
+        site = web.TCPSite(runner, 'localhost', 8080)
+        await site.start()
+        print("server started")
+        
+    async def stop(self):
+        await self._web_server.shutdown()
+        await self._web_server.cleanup()
+
+
 class API_Instance:
     RETRY_MS = 1000
     MAX_RETRIES = 60
 
     def __init__(self, root: str, password: str):
         self._root = root
-        self._event_loop = None
+        self._event_loop = asyncio.get_event_loop()
         
         self.vendors: dict[str, API.Endpoint] = self._load_vendors(
             Path(root) / 'src' / 'hedgepy' / 'common' / 'vendors')
@@ -173,13 +201,13 @@ class API_Instance:
         self._response_manager = ResponseManager()
         self._request_manager = RequestManager(self)
         self._database_manager = DatabaseManager(self, password)
+        self._server_manager = ServerManager(self)
         
         self._retries: dict[UUID, int] = {}
 
     async def start(self):
-        self._event_loop = asyncio.get_event_loop()
-        print(f"API_Instance.start: {self._event_loop}")
         await self._init_vendors()
+        await self._server_manager.start()
         await self._database_manager.start()
         await self._request_manager.start()
         
@@ -209,7 +237,7 @@ class API_Instance:
                     )
                 )
 
-    def request(self, vendor: str, method: str, *args, **kwargs) -> UUID:
+    def _request(self, vendor: str, method: str, *args, **kwargs) -> UUID:
         task = Task(endpoint=self.vendors[vendor], method=method, args=args, kwargs=kwargs)
         self._request_manager._put_queue(task)
         return task.corr_id
@@ -222,10 +250,23 @@ class API_Instance:
         else:
             self._retries[corr_id] = 1
     
-    async def response(self, corr_id: UUID) -> API.FormattedResponse:
+    async def _response(self, corr_id: UUID) -> API.FormattedResponse:
         try: 
             return await self._response_manager.pop(corr_id)
         except KeyError:
             self._retries = self._check_retries(corr_id)
             await asyncio.sleep(self.RETRY_MS/1e3)
-            return await self.response(corr_id)
+            return await self._response(corr_id)
+
+    async def request(self, request: web.Request) -> UUID:
+        request_js = json.loads(await request.text())
+    
+        try:
+            template.validate(instance=request_js)
+        except jsonschema.exceptions.ValidationError as e:
+            raise web.HTTPBadRequest(reason=str(e))
+    
+        corr_id = self._request(**request_js)
+    
+        return web.json_response({'corr_id': corr_id})
+    

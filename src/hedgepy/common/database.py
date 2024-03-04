@@ -1,7 +1,6 @@
 import datetime
 from psycopg import sql
 from psycopg_pool import AsyncConnectionPool
-from hedgepy.common.API import FormattedResponse
 from typing import Any
 
 DB_TYPE = ["text",  "bool", "null", "int", "float", "date", "time", "timestamp", "interval"]

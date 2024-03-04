@@ -2,17 +2,17 @@ import os
 import asyncio
 import argparse
 import getpass
-from pathlib import Path
 
-from hedgepy.common.io import API_Instance
+from hedgepy.server.server import API_Instance
 
 
 def main():
     root = os.getcwd()
+    
     password = getpass.getpass('Enter password: ')
     api_instance = API_Instance(root=root, password=password)
     del password
-    
+
     asyncio.run(api_instance.start())
     
     

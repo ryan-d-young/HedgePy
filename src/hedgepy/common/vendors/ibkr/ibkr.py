@@ -18,6 +18,7 @@ from ibapi.client import EClient
 from ibapi.connection import Connection as _Connection
 from ibapi.decoder import Decoder
 from ibapi.order import Order as IBOrder
+from ibapi.message import OUT
 
 from hedgepy.common import API
 
@@ -157,9 +158,19 @@ class Client(EClient):
         
         self.reader = Reader(self.conn, self.msg_queue)
         asyncio.create_task(self.reader.run())
-        self.startApi()
+        await self.startApi()
         self.wrapper.connectAck()
-
+        
+    async def sendMsg(self, msg):
+        full_msg = comm.make_msg(msg)
+        await self.conn.sendMsg(full_msg)
+    
+    async def startApi(self):
+        msg = comm.make_field(OUT.START_API) \
+            + comm.make_field(2) \
+            + comm.make_field(self.clientId) \
+            + comm.make_field(self.optCapab)
+        await self.sendMsg(msg)
 
 class App(EWrapper, Client):
     def __init__(self): 
