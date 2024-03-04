@@ -1,5 +1,5 @@
-from hedgepy.bases import API
-from hedgepy.vendors.edgar import edgar
+from hedgepy.common import API
+from hedgepy.common.vendors.edgar import edgar
 
 endpoint = API.Endpoint(getters=(edgar.get_submissions, 
                                        edgar.get_concept, 

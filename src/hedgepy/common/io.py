@@ -10,8 +10,8 @@ from collections import UserDict
 from functools import partial
 from uuid import uuid4, UUID
 
-from hedgepy.bases import API
-from hedgepy.bases.database import make_identifiers, QUERIES
+from hedgepy.common import API
+from hedgepy.common.database import make_identifiers, QUERIES
 
 
 @dataclass
@@ -167,7 +167,8 @@ class API_Instance:
         self._root = root
         self._event_loop = None
         
-        self.vendors: dict[str, API.Endpoint] = self._load_vendors(Path(root) / 'src' / 'hedgepy' / 'vendors')
+        self.vendors: dict[str, API.Endpoint] = self._load_vendors(
+            Path(root) / 'src' / 'hedgepy' / 'common' / 'vendors')
 
         self._response_manager = ResponseManager()
         self._request_manager = RequestManager(self)
@@ -186,7 +187,7 @@ class API_Instance:
         vendors = {}                    
         for vendor in vendor_root.iterdir():
             if vendor.is_dir() and not vendor.stem.startswith('_'):
-                vendors[vendor.stem] = import_module(f'hedgepy.vendors.{vendor.stem}').endpoint    
+                vendors[vendor.stem] = import_module(f'hedgepy.common.vendors.{vendor.stem}').endpoint    
         return vendors
     
     async def _init_vendors(self):

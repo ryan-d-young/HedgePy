@@ -1,5 +1,5 @@
-from hedgepy.bases import API
-from hedgepy.vendors.fred import fred
+from hedgepy.common import API
+from hedgepy.common.vendors.fred import fred
 
 endpoint = API.Endpoint(getters=(fred.get_category,
                                        fred.get_category_children,

@@ -4,7 +4,7 @@ import math
 import requests
 import dotenv
 from pathlib import Path
-from hedgepy.bases import API
+from hedgepy.common import API
 
 
 _ENV_PATH = Path('.env')

@@ -19,7 +19,7 @@ from ibapi.connection import Connection as _Connection
 from ibapi.decoder import Decoder
 from ibapi.order import Order as IBOrder
 
-from hedgepy.bases import API
+from hedgepy.common import API
 
 
 _ENV_PATH = Path(os.getcwd()) / '.env'

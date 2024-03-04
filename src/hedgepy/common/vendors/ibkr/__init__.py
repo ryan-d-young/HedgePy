@@ -1,5 +1,5 @@
-from hedgepy.bases import API
-from hedgepy.vendors.ibkr import ibkr
+from hedgepy.common import API
+from hedgepy.common.vendors.ibkr import ibkr
 
 endpoint = API.Endpoint(app_constructor = ibkr.construct_app, 
                               environment_variables = (API.EnvironmentVariable.from_dotenv('IBKR_IP'), 
