@@ -60,7 +60,6 @@ class Connection(_Connection):
             print(f"Failed to connect: {e}")
             return
         self.socket.setblocking(False)
-        print("Connection connected")
         
     async def disconnect(self):
         async with self.lock:

@@ -1,10 +1,9 @@
-from hedgepy.server.server import API_Instance
+import aiohttp
+from hedgepy.client.bases import Client
 
 
-
-
-
-def main():
-    ...
+#http_session = aiohttp.ClientSession(base_url="http://localhost:8080")
+app = Client()
     
-    
+#if __name__ == '__main__':
+#    app.run()

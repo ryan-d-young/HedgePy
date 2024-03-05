@@ -6,7 +6,7 @@ from aiohttp import web
 from psycopg_pool import AsyncConnectionPool
 from pathlib import Path
 from importlib import import_module
-from typing import Callable, Any
+from typing import Callable, Literal
 from dataclasses import dataclass
 from collections import UserDict
 from functools import partial
@@ -172,7 +172,9 @@ class ServerManager:
         
     def _init_web_server(self):
         app = web.Application()
-        app.router.add_post('/api', self._api_instance.request)
+        app.router.add_post('/request', self._api_instance.request)
+        app.router.add_get('/response', self._api_instance.response)
+        app.router.add_get('/status', self._api_instance.status)
         return app
         
     async def start(self):
@@ -250,17 +252,20 @@ class API_Instance:
         else:
             self._retries[corr_id] = 1
     
-    async def _response(self, corr_id: UUID) -> API.FormattedResponse:
+    async def response(self, request: web.Request) -> API.FormattedResponse:
+        request_js = json.loads(await request.text())
+        corr_id = UUID(request_js['corr_id'])
+        
         try: 
             return await self._response_manager.pop(corr_id)
         except KeyError:
             self._retries = self._check_retries(corr_id)
             await asyncio.sleep(self.RETRY_MS/1e3)
-            return await self._response(corr_id)
+            return await self.response(corr_id)
 
     async def request(self, request: web.Request) -> UUID:
         request_js = json.loads(await request.text())
-    
+
         try:
             template.validate(instance=request_js)
         except jsonschema.exceptions.ValidationError as e:
@@ -269,4 +274,11 @@ class API_Instance:
         corr_id = self._request(**request_js)
     
         return web.json_response({'corr_id': corr_id})
-    
+
+    async def status(self, _) -> web.Response:
+        return web.json_response({
+            'server': 'running',  # if a response is received, the server is running
+            'api': 'running' if self._request_manager._started else 'stopped',
+            'db': 'running' if self._database_manager._pool._open else 'stopped',
+        })
+        
