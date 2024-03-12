@@ -7,6 +7,8 @@ from pathlib import Path
 ROOT = Path(os.getcwd()) / "templates"
 VALIDATOR = jsonschema.Draft202012Validator
 
+ValidationError = jsonschema.exceptions.ValidationError
+
 
 def validate(schema: dict | None = None, instance: dict | None = None) -> Exception | None:
     schema = get_schema() if not schema else schema

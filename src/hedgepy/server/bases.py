@@ -2,7 +2,6 @@ import asyncio
 import dotenv
 import datetime
 import json
-import jsonschema
 from aiohttp import web
 from psycopg_pool import AsyncConnectionPool
 from pathlib import Path
@@ -275,7 +274,7 @@ class API_Instance:
 
         try:
             template.validate(instance=request_js)
-        except jsonschema.exceptions.ValidationError as e:
+        except template.ValidationError as e:
             raise web.HTTPBadRequest(reason=str(e))
     
         corr_id = self._request(**request_js)
