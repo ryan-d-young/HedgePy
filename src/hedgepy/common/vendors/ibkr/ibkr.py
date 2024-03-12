@@ -20,7 +20,7 @@ from ibapi.decoder import Decoder
 from ibapi.order import Order as IBOrder
 from ibapi.message import OUT
 
-from hedgepy.common import API
+from hedgepy.common import API, data
 
 
 _ENV_PATH = Path(os.getcwd()) / '.env'
@@ -170,6 +170,7 @@ class Client(EClient):
             + comm.make_field(self.clientId) \
             + comm.make_field(self.optCapab)
         await self.sendMsg(msg)
+
 
 class App(EWrapper, Client):
     def __init__(self): 
@@ -436,11 +437,20 @@ class Order(_IBObj):
         return super().make(IBOrder)
 
 
-TEST_CONTRACT = Contract(symbol="AAPL", sec_type="STK", exchange="SMART", currency="USD")
+def _resolution_to_bar_size(resolution: str) -> int:  # seconds
+    re_match, py_type = data.resolve_re(resolution)
+    resolution_timedelta = data.cast_re(re_match=re_match, py_type=py_type)
+    return resolution_timedelta.total_seconds()
+
+
+TEST_SYMBOL = "AAPL"
+TEST_CONTRACT = Contract(symbol=TEST_SYMBOL, sec_type="STK", exchange="SMART", currency="USD")
 TEST_ORDER = Order(action="BUY", total_quantity=1, order_type="LMT", lmt_price=100.0)
 DTFMT = '%Y%m%d %H:%M:%S'
 TEST_START_DATE = (datetime.now() - timedelta(days=1)).strftime(DTFMT)
 TEST_END_DATE = datetime.now().strftime(DTFMT)
+TEST_RESOLUTION_HI = "P0000-00-00T00:01:00.000000"
+TEST_RESOLUTION_LO = "P0000-00-00T00:00:05.000000"
 
 
 def format_response(response: API.Response) -> API.Response:
@@ -452,8 +462,8 @@ def format_response(response: API.Response) -> API.Response:
                                   ('tag', str), 
                                   ('value', str), 
                                   ('currency', str)))
-def get_account_summary(app: App, request_id: int, group: str = "All", tags: str = "All"):
-    return app.request('req_account_summary', request_id, group, tags)
+def get_account_summary(app: App, request_id: int):
+    return app.request('req_account_summary', request_id, "All", "All")
 
 
 @API.register_endpoint(formatter=format_response, 
@@ -470,17 +480,18 @@ def get_account_summary(app: App, request_id: int, group: str = "All", tags: str
                           streaming=True)
 def get_realtime_bars(app: App, 
                       request_id: int, 
-                      contract: Contract = TEST_CONTRACT, 
-                      bar_size: int = 5, 
-                      what_to_show: str = "MIDPOINT", 
-                      use_rth: bool = False):
+                      symbol: str = TEST_SYMBOL,
+                      resolution: str = TEST_RESOLUTION_LO, 
+                      **kwargs):
+    bar_size = _resolution_to_bar_size(resolution)
+    contract = Contract(symbol=symbol, **kwargs)
     app._request_id_to_obj[request_id]['Contract'] = contract
     return app.request('req_real_time_bars', 
                        request_id, 
                        contract.make(), 
                        bar_size, 
-                       what_to_show, 
-                       use_rth, 
+                       "MIDPOINT", 
+                       False, 
                        [])
 
 
@@ -498,23 +509,24 @@ def get_realtime_bars(app: App,
                                   ('has_gaps', bool)))
 def get_historical_data(app: App, 
                         request_id: int, 
-                        contract: Contract = TEST_CONTRACT, 
-                        end_date: str = TEST_END_DATE, 
-                        duration_str: str = "1 D", 
-                        bar_size: str = "1 day", 
-                        what_to_show: str = "MIDPOINT", 
-                        use_rth: bool = False, 
-                        keep_up_to_date: bool = False):
-    app._request_id_to_obj[request_id] = [contract]
+                        symbol: str = TEST_SYMBOL,
+                        resolution: str = TEST_RESOLUTION_HI,
+                        start: str = TEST_START_DATE,
+                        end: str = TEST_END_DATE,
+                        **kwargs):
+    duration_str = f"{(end - start).days} D"
+    bar_size = _resolution_to_bar_size(resolution)
+    contract = Contract(symbol=symbol, **kwargs)
+    app._request_id_to_obj[request_id] = [contract]    
     return app.request('req_historical_data', 
                        request_id, 
                        contract.make(), 
-                       end_date, 
+                       end, 
                        duration_str, 
                        bar_size, 
-                       what_to_show, 
-                       use_rth, 
-                       keep_up_to_date, 
+                       "MIDPOINT", 
+                       False, 
+                       False, 
                        []) 
 
 
@@ -527,21 +539,20 @@ def get_historical_data(app: App,
                                   ('attrib', str)))
 def get_historical_ticks(app: App, 
                          request_id: int, 
-                         contract: Contract = TEST_CONTRACT, 
-                         start_date: str = TEST_START_DATE, 
-                         end_date: str = TEST_END_DATE, 
-                         number_of_ticks: int = 1000, 
-                         what_to_show: str = "MIDPOINT", 
-                         use_rth: bool = False):
+                         symbol: str = TEST_SYMBOL,                         
+                         start: str = TEST_START_DATE, 
+                         end: str = TEST_END_DATE, 
+                         **kwargs):
+    contract = Contract(symbol=symbol, **kwargs)
     app._request_id_to_obj[request_id]['Contract'] = contract
     return app.request('req_historical_ticks', 
                        request_id, 
                        contract.make(), 
-                       start_date, 
-                       end_date, 
-                       number_of_ticks, 
-                       what_to_show, 
-                       use_rth, 
+                       start, 
+                       end, 
+                       1000, 
+                       "MIDPOINT", 
+                       False, 
                        True, 
                        [])
     
@@ -549,17 +560,17 @@ def get_historical_ticks(app: App,
 @API.register_endpoint(formatter=format_response, table_type='wide')
 def get_market_data(app: App, 
                     request_id: int, 
-                    contract: Contract = TEST_CONTRACT, 
-                    snapshot: bool = False, 
-                    tick_types: list | None = None):
+                    symbol: str = TEST_SYMBOL,
+                    **kwargs):
+    contract = Contract(symbol=symbol, **kwargs)
     app._request_id_to_obj[request_id]['Contract'] = contract
-    # https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#generic-tick-types
-    tick_types = [1, 2] if not tick_types else tick_types  
-    return app.request('req_mkt_data', request_id, contract.make(), "", snapshot, False, tick_types)
+    tick_types = [1, 2]  # https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#generic-tick-types
+    return app.request('req_mkt_data', request_id, contract.make(), "", False, False, tick_types)
 
 
 @API.register_endpoint(formatter=format_response)
-def get_contract_details(app: App, request_id: int, contract: Contract = TEST_CONTRACT):
+def get_contract_details(app: App, request_id: int, symbol: str = TEST_SYMBOL, **kwargs):
+    contract = Contract(symbol=symbol, **kwargs)
     app._request_id_to_obj[request_id]['Contract'] = contract
     return app.request('req_contract_details', request_id, contract.make())
 

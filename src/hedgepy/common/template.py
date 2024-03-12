@@ -4,7 +4,7 @@ import jsonschema
 from pathlib import Path
 
 
-ROOT = Path(os.getcwd()) / "src" / "hedgepy" / "templates"
+ROOT = Path(os.getcwd()) / "templates"
 VALIDATOR = jsonschema.Draft202012Validator
 
 
@@ -36,29 +36,30 @@ def get_schema() -> dict:
         raise e
 
 
-def get_template(template_name: str) -> dict:
-    schema = get_schema()
+def get_template(template_name: str, schema: dict | None = None) -> dict:
+    schema = get_schema() if not schema else schema
     with open(ROOT / f"{template_name}.json") as file:
         template = json.load(file)
-    if not (e := validate(schema, template)):
-        return template
-    else:
-        raise e
+        if not (e := validate(schema, template)):
+            return template
+        else:
+            raise e
 
 
 def get_templates() -> dict:
-    return dict(
-        zip(map(lambda x: x.stem, ROOT.glob("*.json")),
-            map(lambda x: get_template(x.stem), ROOT.glob("*.json")))
+    schema = get_schema()
+    templates = [template.stem for template in ROOT.glob("*.json") if not template.stem.startswith("_")]
+    return dict(zip(
+        templates, 
+        map(lambda template: get_template(template, schema), templates)
+        )
     )
 
 
 def put_template(template_name: str, template: dict):
     schema = get_schema()
     if not (e := validate(schema, template)):
-        if (fp := ROOT / f"{template_name}.json").exists():
-            os.remove(fp)
-        with open(fp, "x") as f:
+        with open(ROOT / f"{template_name}.json", "w") as f:
             f.write(json.dumps(template, indent=4))
     else:
         raise e

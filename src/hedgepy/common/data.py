@@ -100,4 +100,6 @@ def cast_re(re_match: re.Match, py_type: PyType) -> PyType:
             return _cast_re_datetime(re_match)
         case "datetime.timedelta":
             return _cast_re_duration(re_match)
-
+        case _:
+            raise ValueError(f"Unsupported type: {py_type}")
+        

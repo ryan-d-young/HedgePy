@@ -2,6 +2,7 @@ import asyncio
 import dotenv
 import datetime
 import json
+import jsonschema
 from aiohttp import web
 from psycopg_pool import AsyncConnectionPool
 from pathlib import Path
@@ -13,21 +14,25 @@ from functools import partial
 from uuid import uuid4, UUID
 
 from hedgepy.common import API, template
-from hedgepy.common.database import make_identifiers, QUERIES
+from dev.src.hedgepy.server.query import make_identifiers, QUERIES
 
 
 @dataclass
+class Resource:
+    vendor: str | None = None
+    endpoint: str | None = None
+    start: datetime.datetime | None = None
+    end: datetime.datetime | None = None
+    resolution: str | None = None
+    orientation: Literal['wide', 'long'] = 'wide'
+    symbol: tuple[str] | None = None
+    
+
+@dataclass
 class Task:
-    endpoint: API.Endpoint
-    method: str
-    args: tuple | None = None
-    kwargs: dict | None = None
+    bound_func: Callable
     
     def __post_init__(self):
-        if not self.args:
-            self.args = ()
-        if not self.kwargs:
-            self.kwargs = {}
         self.corr_id = uuid4()
 
 
@@ -56,7 +61,7 @@ class RequestManager:
         self._api_instance = api_instance
         self._task_queue_urgent = asyncio.PriorityQueue()
         self._task_queue_normal = asyncio.LifoQueue()
-        self._started = False
+        self._running = False
 
     def _put_queue(self, task: Task, urgent: bool = False):
         if urgent:
@@ -88,15 +93,15 @@ class RequestManager:
         await asyncio.sleep(self.CYCLE_SLEEP_MS/1e3)
 
     async def run(self):
-        while self._started: 
+        while self._running: 
             await self.cycle()
 
     async def start(self):
-        self._started = True
+        self._running = True
         await self.run()
         
     async def stop(self):
-        self._started = False
+        self._running = False
         
 
 class DatabaseManager:
@@ -208,10 +213,12 @@ class API_Instance:
         self._retries: dict[UUID, int] = {}
 
     async def start(self):
-        await self._init_vendors()
-        await self._server_manager.start()
-        await self._database_manager.start()
-        await self._request_manager.start()
+        for routine in (
+            self._init_vendors, 
+            self._server_manager.start, 
+            self._database_manager.start, 
+            self._request_manager.start):
+            await routine()
         
     def _load_vendors(self, vendor_root: Path) -> dict[str, API.Endpoint]:
         vendors = {}                    
@@ -223,7 +230,7 @@ class API_Instance:
     async def _init_vendors(self):
         for endpoint in self.vendors.values():
             if endpoint.app_constructor and endpoint.loop:
-                app = endpoint.app_constructor(*endpoint.app_constructor_args, **endpoint.app_constructor_kwargs)
+                app = endpoint.construct_app()
                 asyncio.create_task(
                     endpoint.loop.start_fn(
                         app, 
@@ -278,7 +285,7 @@ class API_Instance:
     async def status(self, _) -> web.Response:
         return web.json_response({
             'server': 'running',  # if a response is received, the server is running
-            'api': 'running' if self._request_manager._started else 'stopped',
+            'api': 'running' if self._request_manager._running else 'stopped',
             'db': 'running' if self._database_manager._pool._open else 'stopped',
         })
         

@@ -65,11 +65,12 @@ class EndpointMetadata:
 
 @dataclass
 class Endpoint:
+    app_instance: object = None
     app_constructor: Callable | None = None
     app_constructor_args: tuple | None = None
     app_constructor_kwargs: dict | None = None
     loop: EventLoop | None = None
-    getters: tuple[Callable] | None = None
+    getters: dict[str, Callable] | None = None
     environment_variables: tuple[EnvironmentVariable] | None = None
     metadata: EndpointMetadata | None = None
     
@@ -82,7 +83,12 @@ class Endpoint:
             self.app_constructor_kwargs = {}
         if not (self.app_constructor or self.getters):
             raise ValueError('APIEndpoint must have either an app_constructor or getters')
-    
+        
+    def construct_app(self):
+        if self.app_constructor and not self.app_instance:
+            self.app_instance = self.app_constructor(*self.app_constructor_args, **self.app_constructor_kwargs)
+        return self.app_instance
+
 
 @dataclass
 class Request:

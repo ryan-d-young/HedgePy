@@ -3,7 +3,7 @@ import asyncio
 import argparse
 import getpass
 
-from hedgepy.server.server import API_Instance
+from dev.src.hedgepy.server.bases import API_Instance
 
 
 def main():
