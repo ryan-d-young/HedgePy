@@ -1,10 +1,12 @@
+import json
 import dotenv
 import requests
+from datetime import datetime
 from pathlib import Path
 from functools import wraps, partial
 from typing import Any, Callable, Literal
-from dataclasses import dataclass
-from uuid import uuid4
+from dataclasses import dataclass, asdict
+from uuid import uuid4, UUID
 
 
 @dataclass
@@ -92,20 +94,22 @@ class Endpoint:
 
 @dataclass
 class Request:
-    vendor: str
-    endpoint: str
-    args: tuple | None = None
-    kwargs: dict | None = None
-    corr_id: str | None = None
+    vendor: str | None = None
+    endpoint: str | None = None
+    start: datetime.datetime | None = None
+    end: datetime.datetime | None = None
+    resolution: str | None = None
+    symbol: tuple[str] | None = None
     
     def __post_init__(self):
-        if not self.corr_id:
-            self.corr_id = str(uuid4())
-        if not self.args:
-            self.args = ()
-        if not self.kwargs:
-            self.kwargs = {}
-
+        self.corr_id: UUID = uuid4()
+        
+    @property
+    def js(self):
+        return asdict(self)
+        
+    def encode(self) -> str:
+        return json.dumps(self.js)
 
 @dataclass
 class ResponseMetadata:
@@ -142,15 +146,11 @@ class Response:
     data: tuple[tuple[Any]]
     fields: tuple[tuple[str, type]]
     corr_id: str | None = None
-    index: str | tuple[str] | None = None
     metadata: ResponseMetadata | None = None
     
     def __post_init__(self):
         if not self.corr_id:
             self.corr_id = str(uuid4())
-        if self.index:
-            if isinstance(self.index, str):
-                self.index = (self.index,)
         assert len(self.fields) == len(self.data[0]), "Fields and data have different lengths"
                 
 
@@ -164,27 +164,22 @@ class FormattedResponse:
     fields: tuple[tuple[str, type]]
     vendor_name: str
     endpoint_name: str
-    index: str | tuple[str] | None = None
     metadata: ResponseMetadata | None = None
     corr_id: str | None = None
-    table_type: Literal['wide', 'long'] | None = None
     
     @classmethod
     def format(cls, 
                response: Response, 
                vendor_name: str, 
                endpoint_name: str, 
-               table_type: Literal['wide', 'long'] | None = None, 
                fields: tuple[tuple[str, type]] | None = None
                ) -> 'FormattedResponse':
         return cls(data=response.data,
                    fields=fields,  
                    vendor_name=vendor_name, 
                    endpoint_name=endpoint_name, 
-                   index=response.index,
                    metadata=response.metadata, 
-                   corr_id=response.corr_id, 
-                   table_type=table_type)
+                   corr_id=response.corr_id)
 
 
 def rest_get(base_url: str, 
@@ -239,9 +234,7 @@ def format_rest_response(response: requests.Response) -> tuple[tuple[Any]]:
 
 
 def register_endpoint(formatter: Callable[[requests.Response], Response], 
-                      table_type: Literal['wide', 'long'] | None = None, 
                       fields: tuple[tuple[str, type]] | None = None, 
-                      discard: tuple[str] | None = None,
                       streaming: bool = False
                       ) -> Callable[..., FormattedResponse]:
     def decorator(endpoint: Callable[..., requests.Response]): 
@@ -256,12 +249,10 @@ def register_endpoint(formatter: Callable[[requests.Response], Response],
             final_response = FormattedResponse.format(interim_response, 
                                                          vendor_name, 
                                                          endpoint_name, 
-                                                         table_type, 
                                                          fields)
 
             return final_response
         
-        wrapper.discard = discard
         wrapper.streaming = streaming
         
         return wrapper

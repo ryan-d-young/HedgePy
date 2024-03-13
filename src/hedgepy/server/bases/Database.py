@@ -1,7 +1,11 @@
+import asyncio
 import datetime
 from psycopg import sql
 from psycopg_pool import AsyncConnectionPool
-from typing import Any
+from typing import Any, Callable
+from functools import partial
+
+from hedgepy.common import API
 
 
 DB_TYPE = ["text",  "bool", "null", "int", "float", "date", "time", "timestamp", "interval"]
@@ -180,14 +184,83 @@ async def check_columns(identifiers: tuple[sql.Identifier | sql.SQL], pool: Asyn
     return await _execute_query(query, pool, (schema, table))
  
  
-QUERIES = dict(zip(QUERY_STUBS.keys(), 
-                   (create_schema,
-                    create_table, 
-                    insert, 
-                    insert_bulk, 
-                    update, 
-                    select, 
-                    delete_schema, 
-                    delete_table, 
-                    delete_records)))
- 
+
+class DatabaseManager:
+    _QUERIES = dict(zip(
+        QUERY_STUBS.keys(), 
+        (create_schema,
+         create_table, 
+         insert, 
+         insert_bulk, 
+         update, 
+         select, 
+         delete_schema, 
+         delete_table, 
+         delete_records)
+        ))
+
+    def __init__(self, 
+                 api_instance: 'API_Instance',
+                 dbname: str,
+                 host: str,
+                 port: int,
+                 user: str, 
+                 password: str):
+        self._api_instance = api_instance
+        self._pool =  AsyncConnectionPool(
+            conninfo=f"dbname={dbname} user={user} host={host} port={port} password={password}", 
+            open=False
+            )
+        del password
+
+        self._bind_queries(self._pool)
+                
+    def _bind_queries(self) -> dict[str, Callable]:
+        queries = {}
+        for query, func in self.QUERIES.items():
+            queries[query] = partial(func, pool=self._pool)
+        self._queries = queries
+    
+    def query(self, query: str, *args, **kwargs):
+        return self._queries[query](*args, **kwargs)
+    
+    def check_preexisting_data(self, endpoint: API.Endpoint, meth: str, *args, **kwargs
+                               ) -> tuple[tuple, tuple[tuple]] | None:
+        raise NotImplementedError("To do")
+    
+    def postprocess_response(self, response: API.FormattedResponse) -> tuple[tuple, tuple]:
+        endpoint = self._api_instance.vendors[response.vendor_name]
+        meth = getattr(endpoint.getters, response.endpoint_name)
+        fields, data = response.fields, response.data
+        
+        if meth.discard:
+            fields, data = self._discard(response.fields, response.data, meth.discard)
+            
+        return fields, data
+
+    def _discard(self, fields: tuple[tuple[str, type]], data: tuple[tuple], discard: tuple[str] | None
+                 ) -> tuple[tuple[str, type], tuple[tuple]]:
+        discard_ix = tuple(map(lambda x: fields.index(x), discard))
+        fields = tuple(filter(lambda x: x[0] not in discard_ix, enumerate(fields)))
+        data = tuple(filter(lambda x: x[0] not in discard_ix, enumerate(data)))
+        return fields, data
+            
+    def stage_response(self, response: API.FormattedResponse, dtypes: tuple[type], data: tuple[tuple]
+                       ) -> tuple[tuple, tuple[tuple]]:        
+        schema, table, columns = make_identifiers(schema=response.vendor_name, 
+                                                  table=response.endpoint_name, 
+                                                  columns=response.fields)
+                                
+        schema_exists = self.query('check_schema', (schema,))
+        if not schema_exists:
+            self.query('create_schema', (schema,))
+
+        table_exists = self.query('check_table', (schema, table))
+        if not table_exists:
+            self.query('create_table', (schema, table, columns), dtypes)            
+
+        return (schema, table, columns), data
+        
+    async def start(self):
+        print(f"DatabaseManager.start: {asyncio.get_event_loop()}")
+        await self._pool.open()

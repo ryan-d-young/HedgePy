@@ -1,6 +1,6 @@
 from dataclasses import fields
 from hedgepy.common import template
-from hedgepy.server.bases import Resource
+from dev.src.hedgepy.server.instance import Resource
 
 
 def _post_process_template(template: dict) -> dict:
@@ -35,12 +35,7 @@ def process_templates(templates: dict) -> dict[str, tuple[Resource]]:
     return post_processed
 
 
-def main():
+def parse():
     templates = template.get_templates()
     processed = process_templates(templates)
     return processed
-
-
-if __name__ == "__main__":
-    main()
-        
