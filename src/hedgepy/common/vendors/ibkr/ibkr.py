@@ -20,7 +20,8 @@ from ibapi.decoder import Decoder
 from ibapi.order import Order as IBOrder
 from ibapi.message import OUT
 
-from hedgepy.common import API, data
+from dev.src.hedgepy.server.bases import Data
+from hedgepy.common import API
 
 
 _ENV_PATH = Path(os.getcwd()) / '.env'
@@ -438,8 +439,8 @@ class Order(_IBObj):
 
 
 def _resolution_to_bar_size(resolution: str) -> int:  # seconds
-    re_match, py_type = data.resolve_re(resolution)
-    resolution_timedelta = data.cast_re(re_match=re_match, py_type=py_type)
+    re_match, py_type = Data.resolve_re(resolution)
+    resolution_timedelta = Data.cast_re(re_match=re_match, py_type=py_type)
     return resolution_timedelta.total_seconds()
 
 

@@ -3,7 +3,7 @@ from typing import Callable
 from functools import partial
 
 from hedgepy.common import API
-from dev.src.hedgepy.server.instance import Task
+from hedgepy.server.instance import Task
 
 
 def _bind_request(request: API.Request, vendor: API.Endpoint) -> tuple:
