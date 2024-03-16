@@ -134,12 +134,12 @@ class Server:
             return None
     
     @property
-    def running(self) -> bool:
-        return self._running
-    
-    @property
     def started(self) -> bool:
         return self._started
+    
+    @property
+    def running(self) -> bool:
+        return self._started and self._running
     
     async def run(self):
         if self.started:

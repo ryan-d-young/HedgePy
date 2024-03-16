@@ -1,6 +1,6 @@
 import re
 import datetime
-from typing import TypeVar
+from typing import TypeVar, Any
 
 
 DFMT = "%Y-%m-%d"
@@ -102,3 +102,70 @@ def cast_re(re_match: re.Match, py_type: PyType) -> PyType:
             return _cast_re_duration(re_match)
         case _:
             raise ValueError(f"Unsupported type: {py_type}")
+
+
+class Data(tuple):
+    def __new__(
+        cls,
+        data: tuple[tuple[Any]],
+        cols: tuple[tuple[str, DBType]] | tuple[tuple[str, PyType]] = None,
+        idx: str | tuple[Any] | None = None
+        ) -> "Data":
+        return super(Data, cls).__new__(cls, data)
+       
+    @staticmethod
+    def _validate_data(data: tuple[tuple[Any]]) -> int:
+        n_records, len_first_row = len(data), len(data[0])
+       
+        assert all(map(
+            lambda row: len(row) == len_first_row,
+            data
+            )),\
+        "Not all rows have equivalent length"
+       
+        return n_records, len_first_row
+
+    @staticmethod
+    def _validate_cols(
+        cols: tuple[tuple[Any, DBType]] | tuple[tuple[Any, PyType]],
+        len_first_row: int
+        ) -> tuple[tuple[Any], tuple[DBType] | tuple[PyType]]:
+        names, types = tuple(zip(*cols))
+        assert all(map(
+            lambda typ: (
+                (isinstance(typ, str) and typ in DB_TYPE)
+                or
+                (isinstance(typ, type) and typ in PY_TYPE)
+                ),
+                types
+            )),\
+        "Columns failed type validation"
+
+        assert len(cols) == len_first_row, "Number of columns does not match length of rows"
+
+        return names, types
+
+    @staticmethod
+    def _validate_idx(idx: Any | tuple[Any], col_names, col_types) -> int:
+        if not isinstance(idx, tuple):
+            if col_names:
+                assert idx in col_names, "Index label not in columns"
+            return 1
+        elif col_names:
+            assert all(map(lambda lbl: lbl in col_names, idx)), "At least one index label not in columns"
+        return len(idx)
+
+    def __init__(self, data, cols = None, idx = None):
+        self._cols = cols
+        self._idx = idx
+
+        n_records, n_cols = self._validate_data(data)
+        col_names, col_types = self._validate_cols(cols, n_cols) if cols else None, None
+        n_idx = self._validate_idx(idx, col_names, col_types) if idx else None
+
+        self._col_names: tuple[Any] = col_names
+        self._col_types: tuple[DBType] | tuple[PyType] = col_types
+        self._n_records: int = n_records
+        self._n_cols: int = n_cols
+        self._n_idx: int = n_idx
+        
