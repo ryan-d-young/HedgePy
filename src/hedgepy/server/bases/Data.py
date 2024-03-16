@@ -104,6 +104,11 @@ def cast_re(re_match: re.Match, py_type: PyType) -> PyType:
             raise ValueError(f"Unsupported type: {py_type}")
 
 
+def cast(value: DBValue) -> PyType:
+    re_match, py_type = resolve_re(value)
+    return cast_re(re_match, py_type)
+
+
 class Data(tuple):
     def __new__(
         cls,
