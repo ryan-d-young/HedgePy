@@ -2,8 +2,8 @@
     "common": {
         "vendor": "ibkr",
         "endpoint": "get_historical_data",
-        "start": "1990-01-01T00:00:00.000000",
-        "resolution": "P0000-00-00T01:00:00.000000"
+        "start": "1990-01-01",
+        "resolution": "PT1H"
     },
     "templates": [
         {"symbol": ["NDQ"]}, 

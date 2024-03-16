@@ -11,8 +11,6 @@ from hedgepy.common import API
 @dataclass
 class ScheduleItem:
     request: API.Request
-    start: tuple[int, int, int]
-    stop: tuple[int, int, int] | None = None
     interval: int | None = None
 
 
@@ -23,11 +21,6 @@ class Schedule:
     interval: datetime.timedelta 
     items: tuple[ScheduleItem] | None = None
 
-    @property
-    def items(self) -> Generator:
-        for item in self._items:
-            yield item
-            
     @property
     def cycles(self):
         return (self.STOP - self.START) // self.INTERVAL

@@ -1,7 +1,8 @@
 {
     "definitions": {
         "string": {"type": "string"},
-        "datetime": {"format": "date-time", "type": "string"},
+        "date": {"format": "date", "type": "string"},
+        "duration": {"format": "duration", "type": "string"},
         "string_array": {"type": "array", "items": {"type": "string"}},
         "orientation": {"type": "string", "enum": ["wide", "long"], "default": "wide"},
         "template": {
@@ -9,9 +10,9 @@
             "properties": {
                 "vendor": {"$ref": "#/definitions/string"}, 
                 "endpoint": {"$ref": "#/definitions/string"},
-                "start": {"$ref": "#/definitions/datetime"},
-                "end": {"$ref": "#/definitions/datetime"},
-                "resolution": {"$ref": "#/definitions/datetime"},
+                "start": {"$ref": "#/definitions/date"},
+                "end": {"$ref": "#/definitions/date"},
+                "resolution": {"$ref": "#/definitions/duration"},
                 "orientation": {"$ref": "#/definitions/orientation"},
                 "symbol": {"$ref": "#/definitions/string_array"},
                 "field": {"$ref": "#/definitions/string_array"}

@@ -16,7 +16,7 @@ FLOAT_RE = r"(?P<sign>\-)?(?P<integer>[0-9]*)(?P<dec>\.)(?P<fraction>[0-9]*)?"
 DATE_RE = r"(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})"
 TIME_RE = r"(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2}).(?P<microsecond>\d{6})"
 DATETIME_RE = DATE_RE + r"T" + TIME_RE
-DURATION_RE = r"P" + DATETIME_RE
+DURATION_RE = r"P(?:(?P<days>\d+)D)?(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+(?:\.\d+)?)S)?)?"
 
 DB_TYPE = ["text",  "bool", "null", "int", "float", "date", "time", "timestamp", "interval"]
 PY_TYPE = [str, bool, None, int, float, datetime.date, datetime.time, datetime.datetime, datetime.timedelta]
@@ -51,37 +51,45 @@ def resolve_db_type(db_type: DBType) -> PyType:
 def _cast_re_text(re_match: re.Match) -> str:
     return re_match.group(0)
 
+
 def _cast_re_bool(re_match: re.Match) -> bool:
     return bool(re_match.group(0))
+
 
 def _cast_re_null(re_match: re.Match) -> None:
     return
 
+
 def _cast_re_int(re_match: re.Match) -> int:
     sign, value = re_match.groups()
     return -int(value) if sign == "-" else int(value)
+
 
 def _cast_re_float(re_match: re.Match) -> float:
     sign, integer, _, fraction = re_match.groups()
     value = float(integer) if not fraction else float(f"{integer}.{fraction}")
     return -value if sign == "-" else value
 
+
 def _cast_re_date(re_match: re.Match) -> datetime.date:
     return datetime.date(*(map(int, re_match.groups())))
+
 
 def _cast_re_time(re_match: re.Match) -> datetime.time:
     return datetime.time(*(map(int, re_match.groups())))
 
+
 def _cast_re_datetime(re_match: re.Match) -> datetime.datetime:
     return datetime.datetime(*(map(int, re_match.groups())))
 
+
 def _cast_re_duration(re_match: re.Match) -> datetime.timedelta:
-    dt = datetime.datetime(*map(lambda x: 1+int(x), re_match.groups()))  # offset is required in case of 0
-    return dt - datetime.datetime(1, 1, 1, 1, 1, 1, 1)
+    days, hours, minutes, seconds = map(lambda x: int(x) if x else 0, re_match.groups())
+    return datetime.timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
 
 def cast_re(re_match: re.Match, py_type: PyType) -> PyType:
-    match str(py_type):
+    match py_type.__name__:
         case "str":
             return _cast_re_text(re_match)
         case "bool":
@@ -92,13 +100,13 @@ def cast_re(re_match: re.Match, py_type: PyType) -> PyType:
             return _cast_re_int(re_match)
         case "float":
             return _cast_re_float(re_match)
-        case "datetime.date":
+        case "date" | "datetime.date":
             return _cast_re_date(re_match)
-        case "datetime.time":
+        case "time" | "datetime.time":
             return _cast_re_time(re_match)
-        case "datetime.datetime":
+        case "datetime" | "datetime.datetime":
             return _cast_re_datetime(re_match)
-        case "datetime.timedelta":
+        case "timedelta" | "datetime.timedelta":
             return _cast_re_duration(re_match)
         case _:
             raise ValueError(f"Unsupported type: {py_type}")

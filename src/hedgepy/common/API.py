@@ -4,7 +4,7 @@ import requests
 from datetime import datetime
 from pathlib import Path
 from functools import wraps, partial
-from typing import Any, Callable, Literal
+from typing import Any, Callable
 from dataclasses import dataclass, asdict
 from uuid import uuid4, UUID
 
