@@ -96,8 +96,8 @@ class Endpoint:
 class Request:
     vendor: str | None = None
     endpoint: str | None = None
-    start: datetime.datetime | None = None
-    end: datetime.datetime | None = None
+    start: datetime | None = None
+    end: datetime | None = None
     resolution: str | None = None
     symbol: tuple[str] | None = None
     
@@ -110,6 +110,7 @@ class Request:
         
     def encode(self) -> str:
         return json.dumps(self.js)
+
 
 @dataclass
 class ResponseMetadata:

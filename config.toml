@@ -1,0 +1,26 @@
+[server]
+host = "localhost"
+port = 8080
+
+[database]
+dbname = "hedgepy"
+host = "localhost"
+port = 5432
+user = "$POSTGRES_USER"
+
+[api]
+start = [4, 0, 0]  # H, M, S
+stop = [20, 0, 0]  # H, M, S
+interval = 15  # S
+
+[api.ibkr]
+host = "localhost"
+port = 4002
+client_id = 0
+
+[api.edgar]
+company = "Independent Researcher"
+email = "$EDGAR_EMAIL"
+
+[api.fred]
+key = "$FRED_KEY"
