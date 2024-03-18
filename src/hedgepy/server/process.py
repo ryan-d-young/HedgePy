@@ -24,6 +24,22 @@ async def fill_data(
         )
 
 
+async def fill_missing_data(
+    backfill: tuple[datetime.date, datetime.date] | None, 
+    frontfill: tuple[datetime.date, datetime.date] | None, 
+    schedule_item: ScheduleItem, 
+    database: Database, 
+    consumer: Consumer
+    ):
+    if backfill:
+        start, end = backfill
+        await fill_data(start, end, schedule_item, database, consumer)
+    if frontfill:
+        start, end = frontfill
+        await fill_data(start, end, schedule_item, database, consumer)
+    
+
+
 async def check_existing_data(
     schedule_item: ScheduleItem, 
     database: Database
@@ -49,10 +65,5 @@ async def check_existing_data(
 async def main(schedule: Schedule, database: Database, consumer: Consumer):
     for schedule_item in schedule.items:
         backfill, frontfill = check_existing_data(schedule_item, database)
-        if backfill:
-            start, end = backfill
-            await fill_data(start, end, schedule_item, database, consumer)
-        if frontfill:
-            start, end = frontfill
-            await fill_data(start, end, schedule_item, database, consumer)
+        fill_missing_data(backfill, frontfill, schedule_item, database, consumer)
     

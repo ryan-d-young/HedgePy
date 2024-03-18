@@ -7,7 +7,7 @@ from hedgepy.server.bases import Server, Database
 
 async def main():
     server = Server.Server(Path(os.getcwd()) / 'src' / 'hedgepy')
-    db = Database.Database('hedgepy_dev', 'localhost', 5432, 'ryan', ...)
+    db = Database.Database('hedgepy_dev', 'localhost', 5432, 'ryan', 'curly9-radio5')
     await init.main(server, db)
     
 
