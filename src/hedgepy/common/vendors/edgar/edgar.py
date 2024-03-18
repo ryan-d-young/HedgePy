@@ -42,7 +42,7 @@ def format_tickers(response: Response) -> dict[str, dict[str, str]]:
                               data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_tickers, table_type='wide')
+@API.register_endpoint(formatter=format_tickers, fields=(('cik', str), ('ticker', str)))
 def get_tickers():
     return _get_tickers()
 
@@ -83,7 +83,15 @@ def format_submissions(response: Response) -> list[dict]:
                               data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_submissions, table_type='wide')
+@API.register_endpoint(formatter=format_submissions, fields=(('ticker', str),
+                                                            ('form', str), 
+                                                            ('accession_number', str), 
+                                                            ('filing_date', str), 
+                                                            ('report_date', str), 
+                                                            ('file_number', str), 
+                                                            ('film_number', str), 
+                                                            ('primary_document', str), 
+                                                            ('is_xbrl', bool)))
 def get_submissions(ticker: str = 'AAPL') -> Response:
     cik = CIK_MAP[ticker]
     directory = ('submissions', f'CIK{cik}.json')
@@ -122,7 +130,14 @@ def format_concept(response: Response) -> list[dict]:
                               data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_concept, table_type='wide')
+@API.register_endpoint(formatter=format_concept, fields=(('ticker', str),
+                                                          ('concept', str),
+                                                          ('unit', str),
+                                                          ('fiscal_year', int),
+                                                          ('fiscal_period', str),
+                                                          ('form', str),
+                                                          ('value', float),
+                                                          ('accession_number', str)))
 def get_concept(ticker: str = 'AAPL', tag: str = 'Assets') -> Response:
     cik = CIK_MAP[ticker]
     directory = ('api', 'xbrl', 'companyconcept', f'CIK{cik}', 'us-gaap', f'{tag}.json')
@@ -171,7 +186,18 @@ def format_facts(response: Response):
                               data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_facts, table_type='wide')
+@API.register_endpoint(formatter=format_facts, fields=(('ticker', str),
+                                                      ('taxonomy', str),
+                                                      ('line_item', str),
+                                                      ('unit', str),
+                                                      ('label', str),
+                                                      ('description', str),
+                                                      ('end', str),
+                                                      ('accession_number', str),
+                                                      ('fiscal_year', int),
+                                                      ('fiscal_period', str),
+                                                      ('form', str),
+                                                      ('filed', bool)))
 def get_facts(ticker: str = 'AAPL') -> Response:
     cik = CIK_MAP[ticker]
     directory = ('api', 'xbrl', 'companyfacts', f'CIK{cik}.json')
@@ -228,7 +254,19 @@ def _last_period():
     return f"CY{int(year) - 1}Q4I" if int(month) - 3 < 0 else f"CY{int(year)}Q{ceil(4 * (int(month)/12))}I"
 
 
-@API.register_endpoint(formatter=format_frame, table_type='wide')
+@API.register_endpoint(formatter=format_frame, fields=(('period', str),
+                                                      ('taxonomy', str),
+                                                      ('tag', str),
+                                                      ('ccp', str),
+                                                      ('uom', str),
+                                                      ('label', str),
+                                                      ('description', str),
+                                                      ('accession_number', str),
+                                                      ('ticker', str),
+                                                      ('entity_name', str),
+                                                      ('location', str),
+                                                      ('end', str),
+                                                      ('value', float)))
 def get_frame(
         tag: str = 'Assets',
         period: str | None = None,

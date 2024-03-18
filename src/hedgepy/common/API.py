@@ -182,6 +182,10 @@ class FormattedResponse:
                    metadata=response.metadata, 
                    corr_id=response.corr_id)
 
+    @property
+    def js(self):
+        return asdict(self)
+
 
 def rest_get(base_url: str, 
              headers: dict[str, str] | None = None,
@@ -255,6 +259,7 @@ def register_endpoint(formatter: Callable[[requests.Response], Response],
             return final_response
         
         wrapper.streaming = streaming
+        wrapper.fields = fields
         
         return wrapper
     return decorator

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from psycopg import sql
+from psycopg import sql, ProgrammingError
 from psycopg_pool import AsyncConnectionPool
 from typing import Any
 
@@ -36,8 +36,8 @@ def _make_columns_eq(columns: Columns) -> sql.SQL:
 def _make_columns_dtype(columns: ColumnsWithDTypes) -> sql.SQL:
     return sql.SQL(", ").join(
         map(
-            lambda x, y: sql.SQL("{} {}").format(sql.Identifier(x), sql.SQL(y)),
-            zip(*columns),
+            lambda x: sql.SQL("{} {}").format(sql.Identifier(x[0]), sql.SQL(x[1])),
+            columns,
         )
     )
 
@@ -188,6 +188,14 @@ class ListColumns(CommandABC):
         return super().make(schema=schema, table=table)
 
 
+class CheckRecords(CommandABC):
+    QUERY_STUB = sql.SQL("SELECT EXISTS (SELECT 1 FROM {schema}.{table} WHERE ")
+    
+    def make(self, schema: Schema, table: Table, condition_columns: Columns, condition_operators: tuple[str]):
+        conditions = _make_conditions(condition_columns, condition_operators)
+        return super().make(schema=schema, table=table) + conditions + sql.SQL(');')
+
+
 class Database:
     QUERIES = {
         "create_schema": CreateSchema(),
@@ -205,6 +213,7 @@ class Database:
         "list_schemas": ListSchemas(),
         "list_tables": ListTables(),
         "list_columns": ListColumns(),
+        "check_records": CheckRecords(),
     }
         
     def __init__(self, dbname: str, host: str, port: int, user: str, password: str):
@@ -215,37 +224,48 @@ class Database:
         del password
         
     async def _execute_one(self, query_stub: sql.SQL, data: tuple | None = None) -> Any | None:
-        async with self.pool.cursor() as cursor:
-            await cursor.execute(query_stub, data[0])
-            return await cursor.fetchall()
+        async with self._pool.connection() as conn:
+            async with conn.cursor() as cursor: 
+                if data:
+                    await cursor.execute(query_stub, data[0])
+                else:
+                    await cursor.execute(query_stub)
+                try: 
+                    return await cursor.fetchall()
+                except ProgrammingError:
+                    return None
 
     async def _execute_many(self, query_stub: sql.SQL, data: tuple[tuple] | None = None) -> Any | None:
-        async with self.pool.cursor() as cursor:
-            await cursor.executemany(query_stub, data)
-            return await cursor.fetchall()
-        
+        async with self._pool.connection() as conn:
+            async with conn.cursor() as cursor: 
+                await cursor.executemany(query_stub, data)
+                return await cursor.fetchall()
+    
     async def _execute_bulk(self, query_stub: sql.SQL, data: tuple[tuple]) -> None:
-        async with self.pool.cursor() as cursor:
-            async with cursor.copy(query_stub) as copy:
-                await copy.write('\n'.join(map(lambda x: '\t'.join(map(str, x)), data)))
+        async with self._pool.connection() as conn:
+            async with conn.cursor() as cursor: 
+                async with cursor.copy(query_stub) as copy:
+                    await copy.write('\n'.join(map(lambda x: '\t'.join(map(str, x)), data)))
 
     async def query(self, which: str, *placeholder_args, **keyword_kwargs) -> None | tuple[tuple[Any]]:
-        match which: 
-            case "insert_row":
-                match len(*placeholder_args):
-                    case 0:
-                        raise ValueError("No data to insert")                    
-                    case 1:
-                        return await self._execute_one(self.QUERIES[which].make(**keyword_kwargs), *placeholder_args)
-                    case _:
+        try:
+            if self._pool.closed:
+                await self._pool.open()
+
+            match which: 
+                case "insert_row":
+                    if isinstance(placeholder_args[0], tuple):
                         return await self._execute_many(self.QUERIES[which].make(**keyword_kwargs), *placeholder_args)
-            case "copy_rows":
-                return await self._execute_bulk(self.QUERIES[which].make(**keyword_kwargs), *placeholder_args)
-            case _:
-                if which in self.QUERIES:
-                    return await self._execute_one(self.QUERIES[which].make(**keyword_kwargs), *placeholder_args)
-                else:
-                    raise ValueError(f"Unsupported query: '{which}' must be one of {self.QUERIES.keys()}")
+                    else: 
+                        return await self._execute_one(self.QUERIES[which].make(**keyword_kwargs), *placeholder_args)
+                case "copy_rows":
+                    return await self._execute_bulk(self.QUERIES[which].make(**keyword_kwargs), *placeholder_args)
+                case _:
+                    if which in self.QUERIES:
+                        return await self._execute_one(self.QUERIES[which].make(**keyword_kwargs), *placeholder_args)
+                    else:
+                        raise ValueError(f"Unsupported query: '{which}' must be one of {self.QUERIES.keys()}")
+        except Exception as e:
+            await self._pool.close()
+            raise e
         
-    async def start(self):
-        await self._pool.open()

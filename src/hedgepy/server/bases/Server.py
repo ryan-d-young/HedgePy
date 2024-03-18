@@ -105,7 +105,8 @@ class Server:
     async def _handle_get(self, request: web.BaseRequest) -> web.Response:
         request_js = await request.json()
         if request_js['corr_id'] in self._responses:
-            response_js = await self._responses.pop(request_js['corr_id'])
+            response = await self._responses.pop(request_js['corr_id'])
+            response_js = response.js
             return web.json_response(response_js)
         else:
             return web.Response(status=404)
@@ -140,6 +141,13 @@ class Server:
     @property
     def running(self) -> bool:
         return self._started and self._running
+    
+    def vendor(self, name: str) -> API.Endpoint:
+        return self._vendors[name]
+    
+    @property
+    def vendors(self) -> dict[str, API.Endpoint]:
+        return self._vendors
     
     async def run(self):
         if self.started:

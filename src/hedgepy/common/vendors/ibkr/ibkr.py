@@ -20,14 +20,14 @@ from ibapi.decoder import Decoder
 from ibapi.order import Order as IBOrder
 from ibapi.message import OUT
 
-from dev.src.hedgepy.server.bases import Data
+from hedgepy.server.bases import Data
 from hedgepy.common import API
 
 
 _ENV_PATH = Path(os.getcwd()) / '.env'
 _IBKR_IP = dotenv.get_key(_ENV_PATH, 'IBKR_IP')
-_IBKR_PORT = int(dotenv.get_key(_ENV_PATH, 'IBKR_PORT'))
-_IBKR_CLIENT_ID = int(dotenv.get_key(_ENV_PATH, 'IBKR_CLIENT_ID'))
+_IBKR_PORT = 1  # int(dotenv.get_key(_ENV_PATH, 'IBKR_PORT'))
+_IBKR_CLIENT_ID = 100  # int(dotenv.get_key(_ENV_PATH, 'IBKR_CLIENT_ID'))
 
 
 IBObj_Type = IBContract | IBOrder
@@ -467,8 +467,7 @@ def get_account_summary(app: App, request_id: int):
     return app.request('req_account_summary', request_id, "All", "All")
 
 
-@API.register_endpoint(formatter=format_response, 
-                          table_type='wide', 
+@API.register_endpoint(formatter=format_response,  
                           fields=(('ticker', str),
                                   ('date', int),
                                   ('open', float),
@@ -496,8 +495,7 @@ def get_realtime_bars(app: App,
                        [])
 
 
-@API.register_endpoint(formatter=format_response, 
-                          table_type='wide', 
+@API.register_endpoint(formatter=format_response,  
                           fields=(('ticker', str),
                                   ('date', int),
                                   ('open', float),
@@ -531,8 +529,7 @@ def get_historical_data(app: App,
                        []) 
 
 
-@API.register_endpoint(formatter=format_response, 
-                          table_type='wide', 
+@API.register_endpoint(formatter=format_response,
                           fields=(('ticker', str),
                                   ('time', str),
                                   ('price', float),
@@ -558,7 +555,7 @@ def get_historical_ticks(app: App,
                        [])
     
     
-@API.register_endpoint(formatter=format_response, table_type='wide')
+@API.register_endpoint(formatter=format_response, fields=(('ticker', str), ('tick_type', int), ('price', float), ('attrib', str)))
 def get_market_data(app: App, 
                     request_id: int, 
                     symbol: str = TEST_SYMBOL,
@@ -569,7 +566,7 @@ def get_market_data(app: App,
     return app.request('req_mkt_data', request_id, contract.make(), "", False, False, tick_types)
 
 
-@API.register_endpoint(formatter=format_response)
+@API.register_endpoint(formatter=format_response, fields=(('contract_ticker', str), ('contract_detail', str), ('contract_value', str)))
 def get_contract_details(app: App, request_id: int, symbol: str = TEST_SYMBOL, **kwargs):
     contract = Contract(symbol=symbol, **kwargs)
     app._request_id_to_obj[request_id]['Contract'] = contract
