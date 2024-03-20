@@ -1,6 +1,5 @@
 import datetime
 import asyncio
-from typing import Generator
 from dataclasses import dataclass
 from uuid import UUID
 from aiohttp import ClientSession
@@ -48,7 +47,7 @@ class Daemon(Consumer):
         self._cycle = 0
         self._schedule = Schedule(start=env['DAEMON_START'], stop=env['DAEMON_STOP'], interval=env['DAEMON_INTERVAL'])
         
-    def set_schedule(self, *items: tuple[ScheduleItem]):
+    def set_schedule(self, items: tuple[ScheduleItem]):
         self._schedule.items = items
         
     async def consume(self) -> tuple[UUID]:

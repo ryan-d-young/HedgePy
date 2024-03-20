@@ -3,7 +3,7 @@ host = "localhost"
 port = 8080
 
 [database]
-dbname = "hedgepy"
+dbname = "hedgepy_dev"
 host = "localhost"
 port = 5432
 user = "$POSTGRES_USER"

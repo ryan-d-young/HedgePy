@@ -2,16 +2,12 @@
 
 import math
 import requests
-import dotenv
-from pathlib import Path
 from hedgepy.common import API
 
 
-_ENV_PATH = Path('.env')
-_API_KEY = dotenv.get_key(_ENV_PATH, 'FRED_API_KEY')
 
-
-get = API.bind_rest_get(base_url="https://api.stlouisfed.org", suffix=f'?api_key={_API_KEY}&file_type=json')
+_key = API.EnvironmentVariable.from_config("$api.fred.key")
+get = API.bind_rest_get(base_url="https://api.stlouisfed.org", suffix=f'?api_key={_key}&file_type=json')
 
 
 def request_category(category: int = 0, attribute: str | None = None, **kwargs):

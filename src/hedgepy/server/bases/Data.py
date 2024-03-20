@@ -1,22 +1,15 @@
 import re
 import datetime
 from typing import TypeVar, Any
+from hedgepy.common.utils.dtwrapper import DATE_RE, TIME_RE, DATETIME_RE, DURATION_RE
 
-
-DFMT = "%Y-%m-%d"
-TFMT = "%H:%M:%S.%f"
-DTFMT = f"{DFMT}T{TFMT}"
-DURFMT = f"P{DTFMT}"
 
 TEXT_RE = r"(?P<str>.*)"
 BOOL_RE = r"(?P<bool>true|false)"
 NULL_RE = r"(?P<none>NULL)"
 INT_RE = r"(?P<sign>\-)?(?P<int>[0-9]*)"
 FLOAT_RE = r"(?P<sign>\-)?(?P<integer>[0-9]*)(?P<dec>\.)(?P<fraction>[0-9]*)?"
-DATE_RE = r"(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})"
-TIME_RE = r"(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2}).(?P<microsecond>\d{6})"
-DATETIME_RE = DATE_RE + r"T" + TIME_RE
-DURATION_RE = r"P(?:(?P<days>\d+)D)?(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+(?:\.\d+)?)S)?)?"
+
 
 DB_TYPE = ["text",  "bool", "null", "int", "float", "date", "time", "timestamp", "interval"]
 PY_TYPE = [str, bool, None, int, float, datetime.date, datetime.time, datetime.datetime, datetime.timedelta]
@@ -168,13 +161,13 @@ class Data(tuple):
             assert all(map(lambda lbl: lbl in col_names, idx)), "At least one index label not in columns"
         return len(idx)
 
-    def __init__(self, data, cols = None, idx = None):
+    def __init__(self, data, cols, idx):
         self._cols = cols
         self._idx = idx
 
         n_records, n_cols = self._validate_data(data)
-        col_names, col_types = self._validate_cols(cols, n_cols) if cols else None, None
-        n_idx = self._validate_idx(idx, col_names, col_types) if idx else None
+        col_names, col_types = self._validate_cols(cols, n_cols) 
+        n_idx = self._validate_idx(idx, col_names, col_types)
 
         self._col_names: tuple[Any] = col_names
         self._col_types: tuple[DBType] | tuple[PyType] = col_types

@@ -1,6 +1,6 @@
 import datetime
 
-from hedgepy.server.bases.Agent import Consumer, Schedule, ScheduleItem
+from hedgepy.server.bases.Agent import Daemon, Schedule, ScheduleItem
 from hedgepy.server.bases.Database import Database
 
 
@@ -9,13 +9,13 @@ async def fill_data(
     end: datetime.date, 
     schedule_item: ScheduleItem, 
     database: Database, 
-    consumer: Consumer
+    daemon: Daemon
     ) -> None:
     request = schedule_item.request
     request.start = start
     request.end = end
-    uuid = await consumer.post(request)
-    response = await consumer.get(uuid)
+    uuid = await daemon.post(request)
+    response = await daemon.get(uuid)
     await database.query(
         which="insert_row", 
         schema=request.vendor, 
@@ -29,14 +29,14 @@ async def fill_missing_data(
     frontfill: tuple[datetime.date, datetime.date] | None, 
     schedule_item: ScheduleItem, 
     database: Database, 
-    consumer: Consumer
+    daemon: Daemon
     ):
     if backfill:
         start, end = backfill
-        await fill_data(start, end, schedule_item, database, consumer)
+        await fill_data(start, end, schedule_item, database, daemon)
     if frontfill:
         start, end = frontfill
-        await fill_data(start, end, schedule_item, database, consumer)
+        await fill_data(start, end, schedule_item, database, daemon)
     
 
 
@@ -46,7 +46,7 @@ async def check_existing_data(
     ) -> tuple[tuple[datetime.date, datetime.date] | None, tuple[datetime.date, datetime.date] | None]:
     backfill = None
     frontfill = None
-    existing = database.query(
+    existing = await database.query(
         which='select_columns', 
         schema=schedule_item.request.vendor, 
         table=schedule_item.request.endpoint, 
@@ -62,8 +62,8 @@ async def check_existing_data(
     return backfill, frontfill
 
 
-async def main(schedule: Schedule, database: Database, consumer: Consumer):
+async def process(schedule: Schedule, database: Database, daemon: Daemon):
     for schedule_item in schedule.items:
-        backfill, frontfill = check_existing_data(schedule_item, database)
-        fill_missing_data(backfill, frontfill, schedule_item, database, consumer)
+        backfill, frontfill = await check_existing_data(schedule_item, database)
+        await fill_missing_data(backfill, frontfill, schedule_item, database, daemon)
     

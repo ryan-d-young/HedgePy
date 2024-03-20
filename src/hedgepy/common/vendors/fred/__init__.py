@@ -25,6 +25,5 @@ endpoint = API.Endpoint(
         fred.get_tags,
         fred.get_tags_series,
     ),
-    environment_variables=(API.EnvironmentVariable.from_dotenv("FRED_API_KEY"),),
     metadata=API.EndpointMetadata(date_format="%Y-%m-%d"),
 )

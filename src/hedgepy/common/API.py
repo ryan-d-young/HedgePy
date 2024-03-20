@@ -1,12 +1,11 @@
 import json
-import dotenv
 import requests
-from datetime import datetime
-from pathlib import Path
 from functools import wraps, partial
 from typing import Any, Callable
 from dataclasses import dataclass, asdict
 from uuid import uuid4, UUID
+
+from hedgepy.common.utils import config
 
 
 @dataclass
@@ -15,9 +14,8 @@ class EnvironmentVariable:
     value: str
     
     @classmethod
-    def from_dotenv(cls, key: str, dotenv_path: str = '.env'):
-        return cls(name=key, 
-                   value=dotenv.get_key(Path(dotenv_path), key))
+    def from_config(cls, key: str):
+        return cls(name=key, value=config.get(key))
 
 
 @dataclass
@@ -31,23 +29,17 @@ class EventLoop:
     app = None
     
     def __post_init__(self):
-        self.started = False
+        self.running = False
         for attr in ('start_fn_args', 'stop_fn_args'):
-            if not getattr(self, attr):
+            if not (tup := getattr(self, attr)):
                 setattr(self, attr, ())
+            else: 
+                setattr(self, attr, config.replace(tup))
         for attr in ('start_fn_kwargs', 'stop_fn_kwargs'):
-            if not getattr(self, attr):
+            if not (di := getattr(self, attr)):
                 setattr(self, attr, {})
-
-    def start(self):
-        if not self.started: 
-            self.start_fn()
-            self.started = True
-
-    def stop(self):
-        if self.started: 
-            self.stop_fn()
-            self.started = False
+            else: 
+                setattr(self, attr, config.replace(di))
 
 
 @dataclass
@@ -96,8 +88,8 @@ class Endpoint:
 class Request:
     vendor: str | None = None
     endpoint: str | None = None
-    start: datetime | None = None
-    end: datetime | None = None
+    start: str | None = None
+    end: str | None = None
     resolution: str | None = None
     symbol: tuple[str] | None = None
     
@@ -218,6 +210,8 @@ def rest_get(base_url: str,
 
 
 def bind_rest_get(base_url: str, **kwargs) -> Callable:
+    if kwargs: 
+        kwargs = config.replace(kwargs)
     return partial(rest_get, base_url=base_url, **kwargs)
 
 

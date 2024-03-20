@@ -1,18 +1,15 @@
-import dotenv
-from pathlib import Path
 from requests import Response
 from hedgepy.common import API
 
 
-_ENV_PATH = Path('.env')
-_COMPANY = dotenv.get_key(_ENV_PATH, 'EDGAR_COMPANY')
-_EMAIL = dotenv.get_key(_ENV_PATH, 'EDGAR_EMAIL')
+_company = API.EnvironmentVariable.from_config("$api.edgar.company")
+_email = API.EnvironmentVariable.from_config("$api.edgar.email")
 
 get_data = API.bind_rest_get(base_url='https://data.sec.gov', 
                                 headers={'Accept': 'application/json',
                                          'Accept-Encoding': 'gzip, deflate',
                                          'Host': 'data.sec.gov', 
-                                         'User-Agent': f'{_COMPANY} {_EMAIL}'})
+                                         'User-Agent': f'{_company} {_email}'})
 
 
 _get_tickers = API.bind_rest_get(base_url='https://www.sec.gov',
@@ -20,7 +17,7 @@ _get_tickers = API.bind_rest_get(base_url='https://www.sec.gov',
                                     headers={'Accept': 'application/json',
                                              'Accept-Encoding': 'gzip, deflate',
                                              'Host': 'www.sec.gov',
-                                             'User-Agent': f'{_COMPANY} {_EMAIL}'})
+                                             'User-Agent': f'{_company} {_email}'})
 
 
 def _sanitize_cik(cik: int | str) -> str:

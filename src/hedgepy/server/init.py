@@ -1,38 +1,70 @@
-from hedgepy.server.bases import Data
-from hedgepy.server.bases.Server import Server
-from hedgepy.server.bases.Database import Database
+import asyncio
+import getpass
+from pathlib import Path
+from datetime import timedelta
+from hedgepy.server.routines import dbinit, parse, process
+from hedgepy.server.bases import Server, Database, Agent
 
 
-async def make_tables(schema: str, tables: tuple[str], columns: tuple[tuple[str, type]], database: Database):
-    for table, cols in zip(tables, columns):
-        cols = tuple((x, Data.resolve_py_type(y)) for x, y in cols)
-        cols = cols + (('date', 'date'),) if 'date' not in (x for x, _ in cols) else cols
-        await database.query(which='create_table', schema=schema, table=table, columns=cols)
+
+def make_server(root: Path) -> Server.Server:
+    return Server.Server(root)
 
 
-async def make_schemas(schemas: tuple[str], database: Database):
-    for schema in schemas: 
-        await database.query(which='create_schema', schema=schema)
+def make_daemon(
+    host: str, 
+    port: int, 
+    start: tuple[int, int, int], 
+    stop: tuple[int, int, int], 
+    interval: int
+    ) -> Agent.Daemon:
+    start_td = timedelta(hours=start[0], minutes=start[1], seconds=start[2])
+    stop_td = timedelta(hours=stop[0], minutes=stop[1], seconds=stop[2])
+    interval_td = timedelta(seconds=interval)    
+    return Agent.Daemon(
+        env={'SERVER_HOST': host,
+             'SERVER_PORT': port, 
+             'DAEMON_START': start_td,
+             'DAEMON_STOP': stop_td,
+             'DAEMON_INTERVAL': interval_td}
+        )
+    
+
+def make_database(dbname: str, host: str, port: int, user: str, password: str) -> Database.Database:
+    return Database.Database(
+        dbname=dbname, 
+        host=host, 
+        port=port, 
+        user=user, 
+        password=password
+        )
 
 
-def gather_required(server: Server):
-    required = {vendor: {} for vendor in server.vendors}
-    for vendor, endpoint in server.vendors.items():
-        for getter in endpoint.getters:
-            required[vendor][getter.__name__] = getter.fields
-    return required
+async def init() -> tuple[Server.Server, Database.Database, Agent.Daemon, Agent.Schedule]:
+    from hedgepy.common.utils import config
+    
+    server = make_server(config.SOURCE_ROOT)
+    
+    dbpass = getpass.getpass(prompt='Enter database password: ')
+    db = make_database(
+        dbname=config.get('database', 'dbname'), 
+        host=config.get('database', 'host'), 
+        port=config.get('database', 'port'),
+        user=config.get('database', 'user'),
+        password=dbpass
+        )
+    del dbpass
 
+    await dbinit.dbinit(server, db, reset_first=True)
+    
+    daemon = make_daemon(
+        host=config.get('server', 'host'), 
+        port=config.get('server', 'port'), 
+        start=config.get('api', 'start'),
+        stop=config.get('api', 'stop'),
+        interval=config.get('api', 'interval')
+        )
 
-async def reset_database(schemas: tuple[str], database: Database):
-    for schema in schemas:
-        await database.query(which='drop_schema', schema=schema)
-
-
-async def main(server: Server, database: Database, reset_first=False):
-    if reset_first:
-        await reset_database(server.vendors.keys(), database)
-    required = gather_required(server)
-    for vendor, endpoints in required.items():
-        await make_schemas((vendor,), database)
-        await make_tables(vendor, endpoints.keys(), endpoints.values(), database)
-    return True
+    schedule = parse.parse(daemon_start=config.get('api', 'start'), daemon_stop=config.get('api', 'stop'))
+        
+    return server, db, daemon, schedule

@@ -1,8 +1,5 @@
-import os
-import dotenv
 import asyncio
 import socket
-from pathlib import Path
 from decimal import Decimal
 from functools import reduce
 from dataclasses import dataclass
@@ -24,10 +21,9 @@ from hedgepy.server.bases import Data
 from hedgepy.common import API
 
 
-_ENV_PATH = Path(os.getcwd()) / '.env'
-_IBKR_IP = dotenv.get_key(_ENV_PATH, 'IBKR_IP')
-_IBKR_PORT = 1  # int(dotenv.get_key(_ENV_PATH, 'IBKR_PORT'))
-_IBKR_CLIENT_ID = 100  # int(dotenv.get_key(_ENV_PATH, 'IBKR_CLIENT_ID'))
+_host = API.EnvironmentVariable.from_config('api.ibkr.host')
+_port = API.EnvironmentVariable.from_config('api.ibkr.port')
+_client_id = API.EnvironmentVariable.from_config('api.ibkr.client_id')
 
 
 IBObj_Type = IBContract | IBOrder
@@ -184,7 +180,7 @@ class App(EWrapper, Client):
     
     async def run(self):
         if not self.isConnected():
-            await self.connect(_IBKR_IP, _IBKR_PORT, _IBKR_CLIENT_ID)
+            await self.connect(host=_host.value, port=_port.value, clientId=_client_id.value)
         while self.isConnected() or not self.msg_queue.empty():
             try: 
                 print("IBKR cycle")

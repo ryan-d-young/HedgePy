@@ -42,8 +42,7 @@ class Task(asyncio.Task):
     @property
     def corr_id(self) -> UUID:
         return self._corr_id
-    
-            
+
 
 class ResponseManager(UserDict):
     def __init__(self):
@@ -61,11 +60,11 @@ class ResponseManager(UserDict):
     async def pop(self, key: UUID) -> Task:
         async with self._lock:
             return super().pop(key)        
-        
-    
+
+
 class Server:
     CYCLE_MS = 50
-    
+
     def _cleanup(self):
         self._running: bool = False
         self._started: bool = False
@@ -74,34 +73,46 @@ class Server:
         self._site: web.TCPSite | None = None
         self._request_queue: asyncio.PriorityQueue = asyncio.PriorityQueue()
         self._responses: ResponseManager = ResponseManager()
-    
-    def __init__(self, root: Path):
+
+    def __init__(self, root: str):
         self._cleanup()        
         self._vendors: dict[str, API.Endpoint] = {
             vendor.stem: import_module(
                 f'hedgepy.common.vendors.{vendor.stem}'
-                ).endpoint for vendor in (root / 'common' / 'vendors').iterdir()
+                ).endpoint for vendor in (Path(root) / 'common' / 'vendors').iterdir()
             }
-        
+
     async def _ainit(self):
         self._server = web.Server(self._handler)
         self._runner = web.ServerRunner(self._server)
         await self._runner.setup()
         self._site = web.TCPSite(self._runner, 'localhost', 8080)
         await self._site.start()
-        
+
         tasks = []
         for endpoint in self._vendors.values():
             if endpoint.app_constructor and endpoint.loop:
                 app = endpoint.construct_app()
-                task = asyncio.create_task(endpoint.loop.start_fn(app))
+                task = asyncio.create_task(
+                    endpoint.loop.start_fn(
+                        app,
+                        *endpoint.loop.start_fn_args,
+                        **endpoint.loop.start_fn_kwargs,
+                    )
+                )
+                tasks.append(task)
             elif endpoint.loop:
-                task = asyncio.create_task(endpoint.loop.start_fn())
-            tasks.append(task)
+                task = asyncio.create_task(
+                    endpoint.loop.start_fn(
+                        *endpoint.loop.start_fn_args, 
+                        **endpoint.loop.start_fn_kwargs
+                    )
+                )
+                tasks.append(task)
         await asyncio.gather(*tasks)
-        
+
         self._started = True
-    
+
     async def _handle_get(self, request: web.BaseRequest) -> web.Response:
         request_js = await request.json()
         if request_js['corr_id'] in self._responses:
@@ -117,51 +128,50 @@ class Server:
         request_task = Task.from_request(request=request_js, endpoint=endpoint)
         self._request_queue.put_nowait(request_task)
         return web.json_response({'corr_id': request_task.corr_id})        
-        
+
     async def _handler(self, request: web.BaseRequest):
         match request.method:
-            case 'GET':
+            case "GET":
                 return await self._handle_get(request)
             case 'POST':
                 return await self._handle_post(request)
             case _:
                 return web.Response(status=405)
-    
+
     async def _next_request(self) -> Task | None:
         if not self._request_queue.empty():
             return self._request_queue.get_nowait()
         else:
             await asyncio.sleep(self.CYCLE_MS/1e3)
             return None
-    
+
     @property
     def started(self) -> bool:
         return self._started
-    
+
     @property
     def running(self) -> bool:
         return self._started and self._running
-    
+
     def vendor(self, name: str) -> API.Endpoint:
         return self._vendors[name]
-    
+
     @property
     def vendors(self) -> dict[str, API.Endpoint]:
         return self._vendors
-    
+
     async def run(self):
         if self.started:
-           self._running = True
-           while self.running:
-                 if request := await self._next_request():
+            self._running = True
+            while self.running:
+                if request := await self._next_request():
                     response = await request
                     await self._responses.__setitem__(request.corr_id, response)
         else:
             raise RuntimeError('Server not running')
-        
+
     async def stop(self):
         self._running = False
         await self._site.stop()
         await self._runner.cleanup()
         self._cleanup()
-    
