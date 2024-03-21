@@ -241,7 +241,9 @@ def register_endpoint(formatter: Callable[[requests.Response], Response],
         def wrapper(*args, **kwargs) -> FormattedResponse:            
             vendor_name: str = endpoint.__module__.split('.')[-1]
             endpoint_name: str = endpoint.__name__
-            raw_response = endpoint(*args, **kwargs)            
+            raw_response = endpoint(*args, **kwargs)      
+            
+            print(raw_response, endpoint, args, kwargs)      
 
             interim_response = formatter(raw_response)
 

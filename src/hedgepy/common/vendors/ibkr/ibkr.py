@@ -157,44 +157,78 @@ class Client(EClient):
         await self.startApi()
         self.wrapper.connectAck()
         
-    async def sendMsg(self, msg):
+    # async def sendMsg(self, msg):
+    #     full_msg = comm.make_msg(msg)
+    #     await self.conn.sendMsg(full_msg)
+    
+    def sendMsg(self, msg):
+        print('client message: ', msg)
         full_msg = comm.make_msg(msg)
-        await self.conn.sendMsg(full_msg)
+        print('client full message: ', full_msg)
+        self.msg_queue.put_nowait(full_msg)
+        
+    async def sendMsgs(self):
+        while self.isConnected() or not self.msg_queue.empty():
+            print("IBKR Cycle - msg")
+            try:
+                msg = await self.msg_queue.get()
+            except asyncio.QueueEmpty:
+                await asyncio.sleep(50/1e3)
+                continue
+            else:
+                await self.conn.sendMsg(msg)
     
     async def startApi(self):
         msg = comm.make_field(OUT.START_API) \
             + comm.make_field(2) \
             + comm.make_field(self.clientId) \
             + comm.make_field(self.optCapab)
-        await self.sendMsg(msg)
+        self.sendMsg(msg)
 
 
 class App(EWrapper, Client):
     def __init__(self): 
         EWrapper.__init__(self)
         Client.__init__(self, wrapper=self)        
-        self._request_id_to_obj: dict[str | int, dict[Literal['Order', 'Contract'], IBOrder, IBContract]] = {}
+        self._request_id_to_obj: dict[int, dict[Literal['Order', 'Contract'], IBOrder | IBContract]] = {}
+        self._next_valid_id = None
 
     def request(self, meth: str, *args, **kwargs):
         return getattr(super(), _snake_to_camel(meth))(*args, **kwargs)
+    
+    async def cycle(self):
+        while True: 
+            print("IBKR Cycle - main")
+            try: 
+                msg = self.msg_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                await asyncio.sleep(50/1e3)
+                continue
+            else: 
+                print('app message: ', msg)
+                fields = comm.read_fields(msg)
+                print('app fields: ', fields)
+                self.decoder.interpret(fields)
     
     async def run(self):
         if not self.isConnected():
             await self.connect(host=_host.value, port=_port.value, clientId=_client_id.value)
         while self.isConnected() or not self.msg_queue.empty():
-            try: 
-                print("IBKR cycle")
-                msg = self.msg_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                print("Queue is empty, sleeping")
-                await asyncio.sleep(50/1e3)
-                continue
-            else: 
-                print("Processing message")
-                fields = comm.read_fields(msg)
-                self.decoder.interpret(fields)
-        
+            await asyncio.gather(self.cycle(), self.sendMsgs())
+    
+    def next_valid_id(self):
+        if self._next_valid_id:
+            self._request_id_to_obj[self._next_valid_id] = {}
+            return self._next_valid_id
+        else: 
+            self.reqIds(-1)
+            self._request_id_to_obj[self._next_valid_id] = {}
+            return self._next_valid_id
+    
     """The below functions override superclass methods and will never be called directly"""
+
+    def nextValidId(self, orderId: int):
+        self._next_valid_id = orderId
 
     """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#account-summary"""
     def accountSummary(self, 
@@ -330,9 +364,7 @@ class App(EWrapper, Client):
                                           ('high_edge', float),
                                           ('increment', float),
                                           ('market_rule_id', int)), 
-                                  data=formatted_data)
-        
-
+                                  data=formatted_data)      
 
 
 @dataclass
@@ -459,8 +491,8 @@ def format_response(response: API.Response) -> API.Response:
                                   ('tag', str), 
                                   ('value', str), 
                                   ('currency', str)))
-def get_account_summary(app: App, request_id: int):
-    return app.request('req_account_summary', request_id, "All", "All")
+def get_account_summary(app: App):
+    return app.request('req_account_summary', app.next_valid_id(), "All", "All")
 
 
 @API.register_endpoint(formatter=format_response,  
@@ -475,10 +507,10 @@ def get_account_summary(app: App, request_id: int):
                                   ('count', int)), 
                           streaming=True)
 def get_realtime_bars(app: App, 
-                      request_id: int, 
                       symbol: str = TEST_SYMBOL,
                       resolution: str = TEST_RESOLUTION_LO, 
                       **kwargs):
+    request_id = app.next_valid_id()
     bar_size = _resolution_to_bar_size(resolution)
     contract = Contract(symbol=symbol, **kwargs)
     app._request_id_to_obj[request_id]['Contract'] = contract
@@ -503,7 +535,6 @@ def get_realtime_bars(app: App,
                                   ('wap', float),
                                   ('has_gaps', bool)))
 def get_historical_data(app: App, 
-                        request_id: int, 
                         symbol: str = TEST_SYMBOL,
                         resolution: str = TEST_RESOLUTION_HI,
                         start: str = TEST_START_DATE,
@@ -511,6 +542,7 @@ def get_historical_data(app: App,
                         **kwargs):
     duration_str = f"{(end - start).days} D"
     bar_size = _resolution_to_bar_size(resolution)
+    request_id = app.next_valid_id()
     contract = Contract(symbol=symbol, **kwargs)
     app._request_id_to_obj[request_id] = [contract]    
     return app.request('req_historical_data', 
@@ -532,11 +564,11 @@ def get_historical_data(app: App,
                                   ('size', int),
                                   ('attrib', str)))
 def get_historical_ticks(app: App, 
-                         request_id: int, 
                          symbol: str = TEST_SYMBOL,                         
                          start: str = TEST_START_DATE, 
                          end: str = TEST_END_DATE, 
                          **kwargs):
+    request_id = app.next_valid_id()
     contract = Contract(symbol=symbol, **kwargs)
     app._request_id_to_obj[request_id]['Contract'] = contract
     return app.request('req_historical_ticks', 
@@ -553,9 +585,9 @@ def get_historical_ticks(app: App,
     
 @API.register_endpoint(formatter=format_response, fields=(('ticker', str), ('tick_type', int), ('price', float), ('attrib', str)))
 def get_market_data(app: App, 
-                    request_id: int, 
                     symbol: str = TEST_SYMBOL,
                     **kwargs):
+    request_id = app.next_valid_id()
     contract = Contract(symbol=symbol, **kwargs)
     app._request_id_to_obj[request_id]['Contract'] = contract
     tick_types = [1, 2]  # https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#generic-tick-types
@@ -563,7 +595,8 @@ def get_market_data(app: App,
 
 
 @API.register_endpoint(formatter=format_response, fields=(('contract_ticker', str), ('contract_detail', str), ('contract_value', str)))
-def get_contract_details(app: App, request_id: int, symbol: str = TEST_SYMBOL, **kwargs):
+def get_contract_details(app: App, symbol: str = TEST_SYMBOL, **kwargs):
+    request_id = app.next_valid_id()
     contract = Contract(symbol=symbol, **kwargs)
     app._request_id_to_obj[request_id]['Contract'] = contract
     return app.request('req_contract_details', request_id, contract.make())

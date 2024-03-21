@@ -22,7 +22,7 @@ class Schedule:
 
     @property
     def cycles(self):
-        return (self.STOP - self.START) // self.INTERVAL
+        return (self.stop - self.start) // self.interval
 
 
 class Consumer:
@@ -59,6 +59,7 @@ class Daemon(Consumer):
         
     async def run(self):
         while self._running:
+            print("Daemon cycle:", self._cycle)
             if self._cycle < self._schedule.cycles:
                 await self.consume()
             else: 

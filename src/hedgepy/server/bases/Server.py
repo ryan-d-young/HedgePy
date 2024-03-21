@@ -13,34 +13,44 @@ from hedgepy.common import API
 class Task(asyncio.Task):    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._corr_id = uuid4()
+        self._corr_id = str(uuid4())
     
     @classmethod
-    def from_request(cls, request: API.Request, endpoint: API.Endpoint) -> "Task":
-        meth = getattr(endpoint.getters, request.endpoint)
+    def from_request(cls, request: API.Request | dict, endpoint: API.Endpoint) -> "Task":
+        if isinstance(request, API.Request):
+            request = request.js        
+        
+        func_name = request['endpoint']
+        func = endpoint.getters.get(func_name)
 
-        for param in signature(meth).parameters.values():
+        for param in signature(func).parameters.values():
             if param.name in request:
-                value = request[param.name]
+                func = partial(func, **{param.name: request[param.name]})
             
             elif param.default != param.empty:
-                value = param.default
+                func = partial(func, **{param.name: param.default})
             
             elif param.name == "app":
                 if endpoint.app_instance:
-                    value = endpoint.app_instance            
+                    func = partial(func, app=endpoint.app_instance)
                 else: 
-                    raise RuntimeError(f"Missing app instance for {endpoint}")                
+                    raise RuntimeError(f"Missing app instance for {endpoint}")           
+                
+            elif param.name in ("kwargs", "args"):
+                pass
             
             else:
                 raise ValueError(f"Missing required argument: {param.name}")
-
-            meth = partial(meth, **{param.name: value})
         
-        return cls(meth)
+        if asyncio.iscoroutinefunction(func):
+            return cls(func())
+        else:
+            async def afunc():
+                return func()
+            return cls(afunc())
     
     @property
-    def corr_id(self) -> UUID:
+    def corr_id(self) -> str:
         return self._corr_id
 
 
@@ -109,9 +119,8 @@ class Server:
                     )
                 )
                 tasks.append(task)
-        await asyncio.gather(*tasks)
-
         self._started = True
+        return tasks
 
     async def _handle_get(self, request: web.BaseRequest) -> web.Response:
         request_js = await request.json()
@@ -130,13 +139,16 @@ class Server:
         return web.json_response({'corr_id': request_task.corr_id})        
 
     async def _handler(self, request: web.BaseRequest):
-        match request.method:
-            case "GET":
-                return await self._handle_get(request)
-            case 'POST':
-                return await self._handle_post(request)
-            case _:
-                return web.Response(status=405)
+        try: 
+            match request.method:
+                case "GET":
+                    return await self._handle_get(request)
+                case 'POST':
+                    return await self._handle_post(request)
+                case _:
+                    return web.Response(status=405)
+        except Exception as e:
+            return web.Response(status=500, text=str(e))
 
     async def _next_request(self) -> Task | None:
         if not self._request_queue.empty():
@@ -164,6 +176,7 @@ class Server:
         if self.started:
             self._running = True
             while self.running:
+                print("Server cycle")
                 if request := await self._next_request():
                     response = await request
                     await self._responses.__setitem__(request.corr_id, response)

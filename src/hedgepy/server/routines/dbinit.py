@@ -19,7 +19,7 @@ def gather_required(server: Server):
     required = {vendor: {} for vendor in server.vendors}
     for vendor, endpoint in server.vendors.items():
         for getter in endpoint.getters:
-            required[vendor][getter.__name__] = getter.fields
+            required[vendor][getter] = endpoint.getters[getter].fields
     return required
 
 
