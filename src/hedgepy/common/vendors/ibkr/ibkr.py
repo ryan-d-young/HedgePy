@@ -1,18 +1,17 @@
-import asyncio
 import socket
-from decimal import Decimal
+import asyncio
 from functools import reduce
+from decimal import Decimal
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, Coroutine
 from datetime import datetime, timedelta
 
 from ibapi import comm
+from ibapi.connection import Connection as _Connection
 from ibapi.common import BarData, TagValueList, TickAttrib, TickerId
 from ibapi.contract import Contract as IBContract, ContractDetails
 from ibapi.wrapper import EWrapper
 from ibapi.client import EClient
-# from ibapi.reader import EReader
-from ibapi.connection import Connection as _Connection
 from ibapi.decoder import Decoder
 from ibapi.order import Order as IBOrder
 from ibapi.message import OUT
@@ -21,24 +20,7 @@ from hedgepy.server.bases import Data
 from hedgepy.common import API
 
 
-_host = API.EnvironmentVariable.from_config('api.ibkr.host')
-_port = API.EnvironmentVariable.from_config('api.ibkr.port')
-_client_id = API.EnvironmentVariable.from_config('api.ibkr.client_id')
-
-
 IBObj_Type = IBContract | IBOrder
-
-
-def _snake_to_camel(meth: str):
-    return reduce(
-        lambda x, y: x + y.capitalize(), 
-        meth.split('_'))  
-
-
-def _camel_to_snake(meth: str):
-    return (
-        ''.join([' ' + _.lower() if _.isupper() else _ for _ in meth])
-        ).replace(' ', '_')
 
 
 class Connection(_Connection):
@@ -66,7 +48,6 @@ class Connection(_Connection):
                 if self.wrapper:
                     self.wrapper.connectionClosed()
         
-        
     async def sendMsg(self, msg):
         async with self.lock: 
             self.socket.send(msg)
@@ -92,7 +73,7 @@ class Connection(_Connection):
                 
         return buffer
     
-
+    
 class Reader:       
     def __init__(self, conn: Connection, msg_queue):
         self.conn = conn
@@ -104,13 +85,13 @@ class Reader:
             data = await self.conn.recvMsg()
             buffer += data
             while len(buffer) > 0:
-                _, msg, buffer = comm.read_msg(buffer)
+                size, msg, buffer = comm.read_msg(buffer)
                 if msg:
                     await self.msg_queue.put(msg)
                 else:
                     asyncio.sleep(50/1e3)
-            
-            
+
+
 class Client(EClient):
     def __init__(self, wrapper: EWrapper):
         self.msg_queue = asyncio.Queue()
@@ -184,12 +165,15 @@ class Client(EClient):
             + comm.make_field(self.clientId) \
             + comm.make_field(self.optCapab)
         self.sendMsg(msg)
-
+        
 
 class App(EWrapper, Client):
-    def __init__(self): 
+    def __init__(self, host: str, port: int, client_id: int): 
         EWrapper.__init__(self)
-        Client.__init__(self, wrapper=self)        
+        Client.__init__(self, wrapper=self)    
+        self.host = host
+        self.port = port
+        self.clientId = client_id    
         self._request_id_to_obj: dict[int, dict[Literal['Order', 'Contract'], IBOrder | IBContract]] = {}
         self._next_valid_id = None
 
@@ -212,23 +196,20 @@ class App(EWrapper, Client):
     
     async def run(self):
         if not self.isConnected():
-            await self.connect(host=_host.value, port=_port.value, clientId=_client_id.value)
+            await self.connect(host=self.host, port=self.port, clientId=self.clientId)
         while self.isConnected() or not self.msg_queue.empty():
             await asyncio.gather(self.cycle(), self.sendMsgs())
     
-    def next_valid_id(self):
-        if self._next_valid_id:
-            self._request_id_to_obj[self._next_valid_id] = {}
-            return self._next_valid_id
-        else: 
-            self.reqIds(-1)
-            self._request_id_to_obj[self._next_valid_id] = {}
-            return self._next_valid_id
-    
-    """The below functions override superclass methods and will never be called directly"""
+    """The below methods override superclass methods and will never be called directly"""
 
     def nextValidId(self, orderId: int):
         self._next_valid_id = orderId
+        super().nextValidId(orderId)
+        
+    def nextOrderId(self):
+        id_ = self._next_valid_id
+        self._next_valid_id += 1
+        return id_
 
     """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#account-summary"""
     def accountSummary(self, 
@@ -365,6 +346,18 @@ class App(EWrapper, Client):
                                           ('increment', float),
                                           ('market_rule_id', int)), 
                                   data=formatted_data)      
+
+
+def _snake_to_camel(meth: str):
+    return reduce(
+        lambda x, y: x + y.capitalize(), 
+        meth.split('_'))  
+
+
+def _camel_to_snake(meth: str):
+    return (
+        ''.join([' ' + _.lower() if _.isupper() else _ for _ in meth])
+        ).replace(' ', '_')
 
 
 @dataclass
@@ -602,14 +595,12 @@ def get_contract_details(app: App, symbol: str = TEST_SYMBOL, **kwargs):
     return app.request('req_contract_details', request_id, contract.make())
 
 
-def construct_app():
-    return App()
-
-
-async def run(app: App):
+async def construct_app(host: str, port: int, client_id: int) -> Coroutine:
+    app = App(host=host, port=port, client_id=client_id)
     await app.run()
+
     
-    
-def disconnect(app: App):
+def destroy_app(app: App):
     app.disconnect()
+    del app
     

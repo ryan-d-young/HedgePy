@@ -1,3 +1,6 @@
+import asyncio
+import socket
+import struct
 import json
 import requests
 from functools import wraps, partial
@@ -19,70 +22,19 @@ class EnvironmentVariable:
 
 
 @dataclass
-class EventLoop:
-    start_fn: Callable
-    stop_fn: Callable | None = None
-    start_fn_args: tuple | None = None
-    start_fn_kwargs: dict | None = None
-    stop_fn_args: tuple | None = None
-    stop_fn_kwargs: dict | None = None
-    app = None
-    
-    def __post_init__(self):
-        self.running = False
-        for attr in ('start_fn_args', 'stop_fn_args'):
-            if not (tup := getattr(self, attr)):
-                setattr(self, attr, ())
-            else: 
-                setattr(self, attr, config.replace(tup))
-        for attr in ('start_fn_kwargs', 'stop_fn_kwargs'):
-            if not (di := getattr(self, attr)):
-                setattr(self, attr, {})
-            else: 
-                setattr(self, attr, config.replace(di))
-
-
-@dataclass
-class EndpointMetadata:
-    date_format: str | None = None
-    time_format: str | None = None
-    datetime_format: str | None = None
-    
-    def __post_init__(self):
-        if not self.date_format:
-            self.date_format = '%Y-%m-%d'
-        if not self.time_format:
-            self.time_format = '%H:%M:%S'
-        if not self.datetime_format:
-            self.datetime_format = f'{self.date_format} {self.time_format}'
-
-
-@dataclass
-class Endpoint:
-    app_instance: object = None
+class VendorSpec:
     app_constructor: Callable | None = None
     app_constructor_args: tuple | None = None
     app_constructor_kwargs: dict | None = None
-    loop: EventLoop | None = None
     getters: dict[str, Callable] | None = None
-    environment_variables: tuple[EnvironmentVariable] | None = None
-    metadata: EndpointMetadata | None = None
     
     def __post_init__(self):
-        if not self.metadata:
-            self.metadata = EndpointMetadata()
+        if not (self.app_constructor or self.getters):
+            raise ValueError('VendorSpec must have an app_constructor and/or getter(s)')
         if self.app_constructor and not self.app_constructor_args:
             self.app_constructor_args = ()
         if self.app_constructor and not self.app_constructor_kwargs:
             self.app_constructor_kwargs = {}
-        if not (self.app_constructor or self.getters):
-            raise ValueError('APIEndpoint must have either an app_constructor or getters')
-        
-    def construct_app(self):
-        if self.app_constructor and not self.app_instance:
-            self.app_instance = self.app_constructor(*self.app_constructor_args, **self.app_constructor_kwargs)
-        return self.app_instance
-
 
 @dataclass
 class Request:
@@ -236,21 +188,54 @@ def register_endpoint(formatter: Callable[[requests.Response], Response],
                       fields: tuple[tuple[str, type]] | None = None, 
                       streaming: bool = False
                       ) -> Callable[..., FormattedResponse]:
+    """
+    Decorator function that registers an API endpoint.
+
+    Args:
+        formatter (Callable[[requests.Response], Response]): A function that formats the raw response from the endpoint.
+        fields (tuple[tuple[str, type]] | None, optional): A tuple of field names and types for the formatted response. Defaults to None.
+        streaming (bool, optional): Indicates whether the endpoint supports streaming. Defaults to False.
+
+    Returns:
+        Callable[..., FormattedResponse]: The decorated endpoint function.
+
+    """
     def decorator(endpoint: Callable[..., requests.Response]): 
+        """
+        Decorator function that wraps an API endpoint function and processes its response.
+
+        Args:
+            endpoint (Callable[..., requests.Response]): The API endpoint function to be wrapped.
+
+        Returns:
+            The wrapped function that processes the response and returns a formatted response.
+        """
         @wraps(endpoint)
-        def wrapper(*args, **kwargs) -> FormattedResponse:            
+        def wrapper(*args, **kwargs) -> FormattedResponse:
+            """
+            This function is a wrapper for the given endpoint function.
+            It takes the raw response from the endpoint, formats it, and returns a final response.
+
+            Args:
+                *args: Variable length argument list.
+                **kwargs: Arbitrary keyword arguments.
+
+            Returns:
+                FormattedResponse: The final response after formatting.
+
+            """
             vendor_name: str = endpoint.__module__.split('.')[-1]
             endpoint_name: str = endpoint.__name__
-            raw_response = endpoint(*args, **kwargs)      
-            
-            print(raw_response, endpoint, args, kwargs)      
+            raw_response = endpoint(*args, **kwargs)
+
+            print(raw_response, endpoint, args, kwargs)
 
             interim_response = formatter(raw_response)
 
-            final_response = FormattedResponse.format(interim_response, 
-                                                         vendor_name, 
-                                                         endpoint_name, 
-                                                         fields)
+            final_response = FormattedResponse.format(interim_response,
+                                                      vendor_name,
+                                                      endpoint_name,
+                                                      fields)
 
             return final_response
         

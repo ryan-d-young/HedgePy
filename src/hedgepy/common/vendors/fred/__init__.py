@@ -1,7 +1,7 @@
 from hedgepy.common import API
 from hedgepy.common.vendors.fred import fred
 
-endpoint = API.Endpoint(
+endpoint = API.VendorSpec(
     getters={
         'category': fred.get_category,
         'category_children': fred.get_category_children,
@@ -25,5 +25,4 @@ endpoint = API.Endpoint(
         'tags': fred.get_tags,
         'series': fred.get_tags_series,
     },
-    metadata=API.EndpointMetadata(date_format="%Y-%m-%d"),
 )
