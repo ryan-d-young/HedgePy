@@ -94,15 +94,16 @@ class Reader:
 
 class Client(EClient):
     def __init__(self, wrapper: EWrapper):
-        self.msg_queue = asyncio.Queue()
+        self.msg_queue_in = asyncio.Queue()
+        self.msg_queue_out = asyncio.Queue()
         self.wrapper = wrapper
         self.decoder = None
         self.reset()
     
     async def connect(self, host: str, port: int, clientId: int):
         self.host = host
-        self.port = port
-        self.clientId = clientId
+        self.port = int(port)
+        self.clientId = int(clientId)
         
         self.conn = Connection(self.host, self.port)
         await self.conn.connect()
@@ -133,33 +134,31 @@ class Client(EClient):
         
         self.setConnState(EClient.CONNECTED)    
         
-        self.reader = Reader(self.conn, self.msg_queue)
+        self.reader = Reader(self.conn, self.msg_queue_in)
         asyncio.create_task(self.reader.run())
-        await self.startApi()
+        self.startApi()
         self.wrapper.connectAck()
+        print("Connected to TWS")
         
-    # async def sendMsg(self, msg):
-    #     full_msg = comm.make_msg(msg)
-    #     await self.conn.sendMsg(full_msg)
-    
     def sendMsg(self, msg):
         print('client message: ', msg)
         full_msg = comm.make_msg(msg)
         print('client full message: ', full_msg)
-        self.msg_queue.put_nowait(full_msg)
+        self.msg_queue_in.put_nowait(full_msg)
         
-    async def sendMsgs(self):
-        while self.isConnected() or not self.msg_queue.empty():
-            print("IBKR Cycle - msg")
-            try:
-                msg = await self.msg_queue.get()
-            except asyncio.QueueEmpty:
-                await asyncio.sleep(50/1e3)
-                continue
-            else:
-                await self.conn.sendMsg(msg)
+    async def cycle(self):
+        if not self.isConnected():
+            await self.connect(self.host, self.port, self.clientId)
+#        while self.msg_queue.qsize() > 0:
+#            msg_out = await self.msg_queue.get()
+#            await self.conn.sendMsg(msg_out)
+        while len(buffer_in := await self.conn.recvMsg()) > 0:
+            msg_in_size, msg_in, buffer_in = comm.read_msg(buffer_in)
+            print("client message in: ", msg_in)
+            fields = comm.read_fields(msg_in)
+            self.decoder.interpret(fields)
     
-    async def startApi(self):
+    def startApi(self):
         msg = comm.make_field(OUT.START_API) \
             + comm.make_field(2) \
             + comm.make_field(self.clientId) \
@@ -180,28 +179,15 @@ class App(EWrapper, Client):
     def request(self, meth: str, *args, **kwargs):
         return getattr(super(), _snake_to_camel(meth))(*args, **kwargs)
     
-    async def cycle(self):
-        while True: 
-            print("IBKR Cycle - main")
-            try: 
-                msg = self.msg_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                await asyncio.sleep(50/1e3)
-                continue
-            else: 
-                print('app message: ', msg)
-                fields = comm.read_fields(msg)
-                print('app fields: ', fields)
-                self.decoder.interpret(fields)
-    
     async def run(self):
         if not self.isConnected():
             await self.connect(host=self.host, port=self.port, clientId=self.clientId)
-        while self.isConnected() or not self.msg_queue.empty():
-            await asyncio.gather(self.cycle(), self.sendMsgs())
+        while self.isConnected() or not self.msg_queue_in.empty():
+            print("IBKR CYCLE", self.isConnected(), self.msg_queue_in.qsize())
+            await self.cycle()
+            await asyncio.sleep(50/1e3)
     
     """The below methods override superclass methods and will never be called directly"""
-
     def nextValidId(self, orderId: int):
         self._next_valid_id = orderId
         super().nextValidId(orderId)

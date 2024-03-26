@@ -54,6 +54,15 @@ class Request:
         
     def encode(self) -> str:
         return json.dumps(self.js)
+    
+    @property
+    def kwargs(self):
+        return {
+            'start': self.start,
+            'end': self.end,
+            'resolution': self.resolution,
+            'symbol': self.symbol
+        }
 
 
 @dataclass
