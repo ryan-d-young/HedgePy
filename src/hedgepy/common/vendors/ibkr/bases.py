@@ -1,16 +1,21 @@
 """Asynchronous overlay to IBKR's Python app
 
 Notable changes: 
-- Connection replaces socket.socket with asyncio.BaseTransport
+- Connection replaces socket.socket with asyncio.StreamReader and asyncio.StreamWriter
 - Client utilizes asyncio.Queue in favor of regular queue with threading.Lock as in EClient
-- EReader is factored out
+- EReader is replaced by a second asyncio.Queue in Client
+
+We still leverage IBKR's Decoder and Message scheme (comm). We also inherit from EWrapper and EClient, selectively 
+overriding and rerouting methods as needed. 
+
+Usage involves creating a client implementation (ClientImpl), and passing it to an App instance during construction, 
+followed by calling App.start(). Requests made via App.put(request), and responses retrieved via App.get(request_id).
 """
 
 import asyncio
 from abc import ABC, abstractmethod
 from decimal import Decimal
 from typing import AsyncGenerator, Generator, Callable, Any
-from collections import namedtuple
 
 from ibapi import comm
 from ibapi.wrapper import EWrapper
@@ -22,9 +27,6 @@ from ibapi.server_versions import MIN_CLIENT_VER, MAX_CLIENT_VER
 from ibapi.message import OUT
 
 from hedgepy.common import API
-
-
-Message = namedtuple("Message", ["request_id", "data"])
 
 
 class Connection: 
@@ -274,7 +276,7 @@ class ClientImpl(BaseClient, ABC):
             raise NotImplementedError("BAG type contracts are not supported.")
         msg = comm.make_msg(
             comm.make_field(OUT.REQ_HISTORICAL_DATA) + 
-            # comm.make_field(6) +  # version field only required if server version under 124
+            # comm.make_field(6) +  # version field only required when server version under 124
             comm.make_field(reqId) + 
             comm.make_field(contract.conId) +
             comm.make_field(contract.symbol) +
@@ -519,6 +521,9 @@ class App:
     async def get(self, request_id: int) -> API.Response | None | object:
         async with self._lock:
             return self.responses.pop(request_id)
+        
+    async def put(self, request: API.Request):
+        await self.requests.put(request)
         
     async def run(self):
         while self._running:
