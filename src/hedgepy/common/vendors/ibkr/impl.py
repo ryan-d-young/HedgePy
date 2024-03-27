@@ -62,6 +62,7 @@ async def run(app: App):
 async def test():
     app = construct_app("127.0.0.1", 4002)
     await app._ainit()
+    await run(app)
     
 if __name__ == "__main__":
     asyncio.run(test())
