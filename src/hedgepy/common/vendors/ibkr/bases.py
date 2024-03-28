@@ -38,7 +38,7 @@ class Connection:
     # IBKR messages consist of fields separated by null bytes, 
     # with the message itself terminated by two null bytes.
     FIELD_SEP = "\0".encode()
-    MSG_SEP = 4 * FIELD_SEP
+    MSG_SEP = 3 * FIELD_SEP
 
     def __init__(self, host: str, port: int):
         self.buffer: bytes = b""
@@ -98,7 +98,9 @@ class Connection:
         self._writer.write(data)
         
     def sendMsg(self, msg: bytes) -> None:
-        """Redirects ibkr.connection.Connection.sendMsg() to use asyncio.StreamWriter.write instead of socket.send."""
+        """Redirects ibkr.connection.Connection.sendMsg() to use 
+        asyncio.StreamWriter.write instead of socket.send.
+        """
         self.write(data=msg)
         
         
@@ -153,9 +155,9 @@ class BaseClient(EWrapper, EClient):
     async def connect(self):
         """Connects to the IBKR API.
         
-        The full connection process includes:
-        - Establishing a TCP connection to the API server (i.e., IB Gateway)
-        - Sending the initial handshake message, and processing the message received in response
+        Full connection process:
+        - Establish a TCP connection to the API server (i.e., IB Gateway)
+        - Send the initial handshake message, and process the message received in response
             - The handshake message is a string of the form "API\0v{MIN_CLIENT_VER}..{MAX_CLIENT_VER}"
             - The response is a string of the form "v{MIN_SERVER_VER}..{MAX_SERVER_VER}\0{CONN_TIME}\0"
         - Sending the "start API" message, which is a string of the form "START_API\0{CLIENT_ID}\0"
@@ -167,7 +169,7 @@ class BaseClient(EWrapper, EClient):
         await self.handshake()
         self.connState = BaseClient.CONNECTED
 
-        # supplants EClient.startAPI()
+        # EClient.startAPI()
         msg = comm.make_msg(
             comm.make_field(OUT.START_API) + 
             comm.make_field(2) +
@@ -185,27 +187,11 @@ class BaseClient(EWrapper, EClient):
         self.wrapper.connectionClosed()
         self.reset()
         
-    def send(self, request: API.Request) -> int:
-        """Sends a HedgePy API Request to IBKR. 
-
-        Args:
-            request (API.Request): See common.API.Request for details.
-
-        Returns:
-            tuple[int, int]: A tuple containing the request ID and the size of the outgoing queue.
-        """
-        fn: Callable = getattr(self, request.endpoint)
-        request_id: int = self.conn.next_request_id()
-        request_kwargs: dict[str, Any] = request.kwargs
-        msg: bytes = fn(request_id, **request_kwargs)
-        self.conn.write(msg)
-        return request_id
-        
     async def recv(self) -> tuple[Any | None]:
         """Receives a message from IBKR and processes it.
 
         Returns:
-            tuple[int, int, Message]: _description_
+            tuple[Any | None]: A tuple containing the fields of the message.
         """
         if (n := len(self.conn.buffer)) <= 4:
             n = await self.conn.transfer()
@@ -215,7 +201,7 @@ class BaseClient(EWrapper, EClient):
             return fields
 
 
-class ClientImpl(BaseClient, ABC):
+class Client(BaseClient, ABC):
     """ABC to implement specific functions for API interaction."""
 
     """
@@ -230,7 +216,7 @@ class ClientImpl(BaseClient, ABC):
             comm.make_field(reqId) + 
             comm.make_field(group) + 
             comm.make_field(tags))
-        return msg
+        self.conn.write(msg)
 
     def reqRealTimeBars(
         self, reqId: TickerId, contract, barSize: int, whatToShow: str, useRTH: bool
@@ -256,7 +242,7 @@ class ClientImpl(BaseClient, ABC):
             comm.make_field(whatToShow) +
             comm.make_field(useRTH) + 
             comm.make_field(""))  # last field is realTimeBarsOptionsStr, which is always empty
-        return msg
+        self.conn.write(msg)
 
     def reqHistoricalData(
         self,
@@ -299,7 +285,7 @@ class ClientImpl(BaseClient, ABC):
             comm.make_field(formatDate) +
             comm.make_field(keepUpToDate) +
             comm.make_field(""))  # last field is chartOptions, which is always empty
-        return msg
+        self.conn.write(msg)
 
     def reqHistoricalTicks(
         self,
@@ -338,7 +324,7 @@ class ClientImpl(BaseClient, ABC):
             comm.make_field(useRth) +
             comm.make_field(ignoreSize) +
             comm.make_field(""))  # last field is miscOptions, which is always empty
-        return msg
+        self.conn.write(msg)
 
     def reqMktData(
         self,
@@ -375,7 +361,7 @@ class ClientImpl(BaseClient, ABC):
             comm.make_field(snapshot) +
             comm.make_field(regulatorySnapshot) +
             comm.make_field(""))  # last field is mktDataOptions, which is always empty
-        return msg
+        self.conn.write(msg)
 
     def reqContractDetails(self, reqId: TickerId, contract) -> bytes:
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#request-contract-details"""
@@ -405,20 +391,20 @@ class ClientImpl(BaseClient, ABC):
             comm.make_field(contract.secId) +
             comm.make_field(contract.issuerId))  
         # note: this msg actually does not have a blank last field
-        return msg
+        self.conn.write(msg)
 
     """
     RESPONSES
     """
 
-#    @abstractmethod
+    @abstractmethod
     def accountSummary(
         self, reqId: TickerId, account: str, tag: str, value: str, currency: str
-    ) -> API.Response:
+    ):
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#account-summary"""
         ...
 
-#    @abstractmethod
+    @abstractmethod
     def realtimeBar(
         self,
         reqId: TickerId,
@@ -430,114 +416,91 @@ class ClientImpl(BaseClient, ABC):
         volume: int,
         wap: float,
         count: int,
-    ) -> API.Response:
+    ):
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#live-bars"""
         ...
 
-#    @abstractmethod
+    @abstractmethod
     def historicalData(self, reqId: TickerId, bar: BarData) -> API.Response:
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#hist-md"""
         ...
 
-#    @abstractmethod
+    @abstractmethod
     def historicalTicks(
         self, reqId: TickerId, ticks: TagValueList, done: bool
-    ) -> API.Response:
+    ):
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#requesting-time-and-sales"""
         ...
 
-#    @abstractmethod
+    @abstractmethod
     def tickPrice(
         self, reqId: TickerId, tickType: TickerId, price: float, attrib: TickAttrib
-    ) -> API.Response:
+    ):
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#delayed-market-data"""
         ...
 
-#    @abstractmethod
-    def tickSize(
-        self, reqId: TickerId, tickType: TickerId, size: Decimal
-    ) -> API.Response:
-        """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#delayed-market-data"""
-        ...
-
-#    @abstractmethod
+    @abstractmethod
     def contractDetails(
         self, reqId: TickerId, contractDetails: ContractDetails
-    ) -> API.Response:
+    ):
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#request-contract-details"""
         ...
 
-#    @abstractmethod
+    @abstractmethod
     def marketRule(self, marketRuleId: int, priceIncrements: list):
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#request-market-rule"""
         ...
 
 
 class App:
-    PERIOD_MS = 50 / 2
+    PERIOD_MS = 50
     WAITING = object()
     
-    def __init__(self, host: str, port: int, client_impl: ClientImpl):
+    def __init__(self, host: str, port: int, client_impl: Client):
         self.connection = Connection(host, port)
         self.client = None
-        self._client_impl = ClientImpl
-        self._running = False
-        self._requests_in = asyncio.Queue()
-        self._responses_out: dict[int, API.Response] = {}
+        self.responses: dict[int, API.Response] = {}
         self._lock = asyncio.Lock()
+        self._client_impl = client_impl
+        self._running = False
+        
+    def request_id(self) -> int:
+        return self.client.conn.next_request_id()
 
     async def _ainit(self):
         self.client = self._client_impl(self.connection)
         await self.client.connect()
-        
-    @property
-    def requests(self) -> asyncio.Queue:
-        return self._requests_in
-
-    @property
-    def responses(self) -> dict[int, API.Response]:
-        return self._responses_out
     
-    async def _cycle_out(self):
-        try: 
-            request = await self.requests.get_nowait()
-        except asyncio.QueueEmpty:
-            pass
-        else:     
-            request_id = self.client.send(request)          
-            self.responses[request_id] = App.WAITING
-    
-    async def _cycle_in(self):
+    async def _cycle(self):
         try: 
             response = await self.client.recv()
         except asyncio.QueueEmpty:
             pass
         else:
-            if response:  # required for cases where response is None
+            if response is not None:
                 request_id, *fields = response
-                self.responses[request_id] = tuple(fields)
+                request_id = int(request_id)
+                async with self._lock:
+                    try: 
+                        self.responses[request_id] += tuple(fields)
+                    except KeyError:
+                        self.responses[request_id] = tuple(fields)
                 print(fields)
 
     async def get(self, request_id: int) -> API.Response | None | object:
         async with self._lock:
-            return self.responses.pop(request_id)
-        
-    async def put(self, request: API.Request):
-        await self.requests.put(request)
-        
+            data = self.responses.get(request_id, App.WAITING)
+            self.responses[request_id] = tuple()
+        return data
+    
     async def run(self):
         while self._running:
             try: 
-                await self._cycle_out() 
-                await asyncio.sleep(self.PERIOD_MS/1e3)
-                await self._cycle_in()
+                await self._cycle()
                 await asyncio.sleep(self.PERIOD_MS/1e3)
                 print("App cycle")
             except KeyboardInterrupt:
                 await self.stop()
-#            except Exception as e:
-#                print(f"Error: {e}")
-#                continue
         else:
             await self.client.disconnect()
             

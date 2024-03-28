@@ -1,6 +1,3 @@
-import asyncio
-import socket
-import struct
 import json
 import requests
 from functools import wraps, partial
@@ -24,15 +21,13 @@ class EnvironmentVariable:
 @dataclass
 class VendorSpec:
     app_constructor: Callable | None = None
-    app_constructor_args: tuple | None = None
     app_constructor_kwargs: dict | None = None
+    app_runner: Callable | None = None
     getters: dict[str, Callable] | None = None
     
     def __post_init__(self):
         if not (self.app_constructor or self.getters):
             raise ValueError('VendorSpec must have an app_constructor and/or getter(s)')
-        if self.app_constructor and not self.app_constructor_args:
-            self.app_constructor_args = ()
         if self.app_constructor and not self.app_constructor_kwargs:
             self.app_constructor_kwargs = {}
 
@@ -97,15 +92,13 @@ class ResponseMetadata:
 
 @dataclass
 class Response:
-    data: tuple[tuple[Any]]
-    fields: tuple[tuple[str, type]]
-    corr_id: str | None = None
+    data: tuple[tuple[Any]] | None = None
+    corr_id: str | int | None = None
     metadata: ResponseMetadata | None = None
     
     def __post_init__(self):
         if not self.corr_id:
             self.corr_id = str(uuid4())
-        assert len(self.fields) == len(self.data[0]), "Fields and data have different lengths"
                 
 
 """Note: we cannot subclass APIResponse in APIFormattedResponse as doing so clashes with dataclass inheritance"""
@@ -115,25 +108,23 @@ class Response:
 @dataclass
 class FormattedResponse:
     data: tuple[tuple[Any]]
-    fields: tuple[tuple[str, type]]
     vendor_name: str
     endpoint_name: str
-    metadata: ResponseMetadata | None = None
     corr_id: str | None = None
+    metadata: ResponseMetadata | None = None
     
     @classmethod
     def format(cls, 
                response: Response, 
                vendor_name: str, 
                endpoint_name: str, 
-               fields: tuple[tuple[str, type]] | None = None
                ) -> 'FormattedResponse':
         return cls(data=response.data,
-                   fields=fields,  
                    vendor_name=vendor_name, 
                    endpoint_name=endpoint_name, 
-                   metadata=response.metadata, 
-                   corr_id=response.corr_id)
+                   corr_id=response.corr_id,
+                   metadata=response.metadata
+                   ) 
 
     @property
     def js(self):
@@ -176,25 +167,8 @@ def bind_rest_get(base_url: str, **kwargs) -> Callable:
     return partial(rest_get, base_url=base_url, **kwargs)
 
 
-def format_rest_response(response: requests.Response) -> tuple[tuple[Any]]:
-    data = tuple()
-    for key, value in response.json(): 
-        if isinstance(value, dict):
-            record = (key, *tuple(value.values))
-        elif isinstance(value, list) or isinstance(value, tuple):
-            record = (key, *value)
-        else: 
-            raise TypeError('Formatting failed due to incorrect record type:\n'
-                            f'RECORD: {record}\n'
-                            f'TYPE: {type(record)} (allowed: list, tuple, dict)\n'
-                            'Please consider writing a custom formatting function and registering it '
-                            'via generic_rest.register')
-        data += record
-    return data
-
-
-def register_endpoint(formatter: Callable[[requests.Response], Response], 
-                      fields: tuple[tuple[str, type]] | None = None, 
+def register_endpoint(fields: tuple[tuple[str, type]],
+                      formatter: Callable[[requests.Response], Response] | None = None, 
                       streaming: bool = False
                       ) -> Callable[..., FormattedResponse]:
     """
@@ -210,58 +184,18 @@ def register_endpoint(formatter: Callable[[requests.Response], Response],
 
     """
     def decorator(endpoint: Callable[..., requests.Response]): 
-        """
-        Decorator function that wraps an API endpoint function and processes its response.
-
-        Args:
-            endpoint (Callable[..., requests.Response]): The API endpoint function to be wrapped.
-
-        Returns:
-            The wrapped function that processes the response and returns a formatted response.
-        """
         @wraps(endpoint)
         def wrapper(*args, **kwargs) -> FormattedResponse:
-            """
-            This function is a wrapper for the given endpoint function.
-            It takes the raw response from the endpoint, formats it, and returns a final response.
-
-            Args:
-                *args: Variable length argument list.
-                **kwargs: Arbitrary keyword arguments.
-
-            Returns:
-                FormattedResponse: The final response after formatting.
-
-            """
             vendor_name: str = endpoint.__module__.split('.')[-1]
             endpoint_name: str = endpoint.__name__
+
             raw_response = endpoint(*args, **kwargs)
-
-            print(raw_response, endpoint, args, kwargs)
-
-            interim_response = formatter(raw_response)
-
-            final_response = FormattedResponse.format(interim_response,
-                                                      vendor_name,
-                                                      endpoint_name,
-                                                      fields)
-
-            return final_response
-        
-        wrapper.streaming = streaming
+            response = formatter(raw_response) if formatter else raw_response
+            return FormattedResponse.format(
+                response, vendor_name, endpoint_name)
+                
         wrapper.fields = fields
+        wrapper.streaming = streaming
         
         return wrapper
     return decorator
-
-
-def validate_response_data(py_dtypes: tuple[type], data: tuple[tuple]) -> None:
-    record_len = len(data[0])
-    for record in data:
-        for ix, (value, dtype) in enumerate(zip(record, py_dtypes)):
-            if not isinstance(value, dtype):
-                try: 
-                    value = dtype(value)
-                except ValueError:
-                    raise TypeError(f"Value {value} at index {ix} is not of type {dtype} and cannot be coerced")
-            assert len(record) == record_len, f"Record {ix} has wrong length ({len(record)} / {record_len} expected)"
