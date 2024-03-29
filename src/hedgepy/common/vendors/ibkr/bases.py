@@ -38,7 +38,7 @@ class Connection:
     # IBKR messages consist of fields separated by null bytes, 
     # with the message itself terminated by two null bytes.
     FIELD_SEP = "\0".encode()
-    MSG_SEP = 3 * FIELD_SEP
+    MSG_SEP = 2 * FIELD_SEP
 
     def __init__(self, host: str, port: int):
         self.buffer: bytes = b""
@@ -66,17 +66,17 @@ class Connection:
             self._writer.close()
             self._writer = None
 
-    async def transfer(self) -> int:
+    async def transfer(self) -> bool:
         try: 
             self.buffer += await asyncio.wait_for(
                 self._reader.readuntil(Connection.MSG_SEP),
                 timeout=0.2)  # matches EClient's timeout
-        except asyncio.TimeoutError:
-            pass
         except asyncio.IncompleteReadError as e:
             self.buffer += e.partial
-        print(self.buffer)
-        return len(self.buffer)        
+        except asyncio.TimeoutError:
+            return False
+        else: 
+            return True
     
     async def transfer_all(self) -> AsyncGenerator[int, None]:
         while await (n := self.transfer()) > 0:
@@ -89,11 +89,6 @@ class Connection:
     def read_all(self) -> Generator[bytes, None, None]:
         while len(self.buffer) > 0:
             yield self.read()
-    
-    def read_n(self, n: int) -> bytes:
-        msg, self.buffer = self.buffer[:n], self.buffer[n:]
-        _, msg, _ = comm.read_msg(msg)
-        return msg
 
     def write(self, data: bytes) -> None:
         self._writer.write(data)
@@ -113,6 +108,7 @@ class BaseClient(EWrapper, EClient):
     
     DISCONNECTED, CONNECTING, CONNECTED = range(3)
     MAX_RETRIES = 100
+    MIN_MSG_LEN = 4
 
     def __init__(self, connection: Connection, client_id: int = 100):
         super(EWrapper).__init__()
@@ -127,6 +123,11 @@ class BaseClient(EWrapper, EClient):
         
         # Internal attrs
         self._started = False
+        self._response_queue = asyncio.Queue()   
+        
+    @property
+    def response_queue(self) -> asyncio.Queue:
+        return self._response_queue     
         
     async def handshake(self, retry: int = 0):
         """Part of the connection process -- never called outside of connect() method.
@@ -141,7 +142,7 @@ class BaseClient(EWrapper, EClient):
 
         """  TODO  """
         try: 
-            _ = await self.conn._reader.readuntil(Connection.MSG_SEP)  # flush null bytes at front of stream
+            _ = await self.conn._reader.readuntil(3 * Connection.FIELD_SEP)  # flush null bytes at front of stream
             server_version_msg = await self.conn._reader.readuntil(Connection.FIELD_SEP)  # followed by server version, null
             server_version = str(server_version_msg).split("\\")[1][-3:]  # strip null bytes from server version
             conn_time_msg = await self.conn._reader.readuntil(Connection.FIELD_SEP)  # followed by connection time, null
@@ -195,16 +196,17 @@ class BaseClient(EWrapper, EClient):
         self.wrapper.connectionClosed()
         self.reset()
         
-    async def recv(self) -> tuple[Any | None]:
-        """Receives a message from IBKR and processes it.
+    async def recv(self) -> None:
+        """Receives a message from IBKR and processes it. Messages are passed to the wrapper; wrapper methods
+        append the response to the response queue for upstream processing.
 
         Returns:
             tuple[Any | None]: A tuple containing the fields of the message.
         """
-        if await self.conn.transfer() > 4:
+        if await self.conn.transfer():
             msg: bytes = self.conn.read()
             fields: tuple[Any] = comm.read_fields(msg)
-            return fields
+            self.decoder.interpret(fields)
 
 
 class Client(BaseClient, ABC):
@@ -408,7 +410,8 @@ class Client(BaseClient, ABC):
         self, reqId: TickerId, account: str, tag: str, value: str, currency: str
     ):
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#account-summary"""
-        ...
+        response = ...
+        self.response_queue.put_nowait(response)
 
     @abstractmethod
     def realtimeBar(
@@ -424,38 +427,44 @@ class Client(BaseClient, ABC):
         count: int,
     ):
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#live-bars"""
-        ...
+        response = ...
+        self.response_queue.put_nowait(response)
 
     @abstractmethod
     def historicalData(self, reqId: TickerId, bar: BarData) -> API.Response:
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#hist-md"""
-        ...
+        response = ...
+        self.response_queue.put_nowait(response)
 
     @abstractmethod
     def historicalTicks(
         self, reqId: TickerId, ticks: TagValueList, done: bool
     ):
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#requesting-time-and-sales"""
-        ...
-
+        response = ...
+        self.response_queue.put_nowait(response)
+        
     @abstractmethod
     def tickPrice(
         self, reqId: TickerId, tickType: TickerId, price: float, attrib: TickAttrib
     ):
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#delayed-market-data"""
-        ...
-
+        response = ...
+        self.response_queue.put_nowait(response)
+        
     @abstractmethod
     def contractDetails(
         self, reqId: TickerId, contractDetails: ContractDetails
     ):
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#request-contract-details"""
-        ...
-
+        response = ...
+        self.response_queue.put_nowait(response)
+        
     @abstractmethod
     def marketRule(self, marketRuleId: int, priceIncrements: list):
         """https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/#request-market-rule"""
-        ...
+        response = ...
+        self.response_queue.put_nowait(response)
 
 
 class App:
@@ -479,19 +488,18 @@ class App:
     
     async def _cycle(self):
         try: 
-            response = await self.client.recv()
+            await self.client.recv()
+            response = self.client.response_queue.get_nowait()
         except asyncio.QueueEmpty:
-            await asyncio.sleep(1)
+            await asyncio.sleep(0)
         else:
-            if response is not None:
-                request_id, *fields = response
-                request_id = int(request_id)
-                async with self._lock:
-                    try: 
-                        self.responses[request_id] += tuple(fields)
-                    except KeyError:
-                        self.responses[request_id] = tuple(fields)
-                print(fields)
+            request_id, *fields = response.popitem()
+            async with self._lock:
+                try: 
+                    self.responses[request_id] += ((fields),)
+                except KeyError:
+                    self.responses[request_id]  = ((fields),)
+            print(fields)
 
     async def get(self, request_id: int) -> API.Response | None | object:
         async with self._lock:

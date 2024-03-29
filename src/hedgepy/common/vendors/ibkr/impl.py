@@ -19,25 +19,39 @@ IBKRResponse = dict[TickerId, tuple]
 
 class ClientImpl(Client):
     def accountSummary(self, reqId: TickerId, account: str, tag: str, value: str, currency: str) -> IBKRResponse:
-        return {reqId: (account, tag, value, currency),}
+        self._response_queue.put_nowait(
+            {reqId: (account, tag, value, currency),}
+            )
 
     def realtimeBar(self, reqId: TickerId, date: TickerId, open_: float, high: float, low: float, close: float, volume: TickerId, wap: float, count: TickerId) -> IBKRResponse:
-        return {reqId: (date, open_, high, low, close, volume),}
+        self._response_queue.put_nowait(
+            {reqId: (date, open_, high, low, close, volume),}
+            )
 
     def historicalData(self, reqId: TickerId, bar: BarData) -> IBKRResponse:
-        return {reqId: (bar.date, bar.open, bar.high, bar.low, bar.close, bar.volume),}
+        self._response_queue.put_nowait(
+            {reqId: (bar.date, bar.open, bar.high, bar.low, bar.close, bar.volume),}
+            )
 
     def historicalTicks(self, reqId: TickerId, ticks: ListOfHistoricalTick[HistoricalTick], done: bool) -> IBKRResponse:
-        return {reqId: (tick.time, tick.price, tick.size) for tick in ticks}
+        self._response_queue.put_nowait(
+            {reqId: (tick.time, tick.price, tick.size) for tick in ticks}
+            )
 
     def tickPrice(self, reqId: TickerId, tickType: TickerId, price: float, attrib: TickAttrib) -> IBKRResponse:
-        return {reqId: (tickType, price),}
+        self._response_queue.put_nowait(
+            {reqId: (tickType, price),}
+            )
 
     def contractDetails(self, reqId: TickerId, contractDetails: ContractDetails) -> IBKRResponse:
-        return {reqId: (lbl, value) for lbl, value in contractDetails.items()}
+        self._response_queue.put_nowait(
+            {reqId: (lbl, value) for lbl, value in contractDetails.items()}
+            )
 
-    def marketRule(self, marketRuleId: TickerId, priceIncrements: TagValueList) -> tuple:
-        return {None: ((marketRuleId, *priceIncrements),)}
+    def marketRule(self, marketRuleId: TickerId, priceIncrements: TagValueList) -> IBKRResponse:
+        self._response_queue.put_nowait(
+            {None: ((marketRuleId, *priceIncrements),)}
+            )
 
 
 def resolve_duration(start: datetime, end: datetime) -> str:

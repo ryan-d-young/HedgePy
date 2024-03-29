@@ -153,6 +153,7 @@ class WebMixin:
 
 class Server(VendorMixin, WebMixin):
     CYCLE_MS = 50
+    LONG_CYCLE_MS = 1e3
 
     def _cleanup(self):
         self.vendors: dict[str, API.VendorSpec] = {}
@@ -195,9 +196,9 @@ class Server(VendorMixin, WebMixin):
                 except KeyboardInterrupt:
                     await self.stop()
                 finally: 
-                    await asyncio.sleep(self.CYCLE_MS / 1e3)
+                    await asyncio.sleep(Server.CYCLE_MS / 1e3)
             else: 
-                await asyncio.sleep(1)            
+                await asyncio.sleep(Server.LONG_CYCLE_MS / 1e3)            
 
     async def stop(self):
         self._running = False
