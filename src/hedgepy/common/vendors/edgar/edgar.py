@@ -34,9 +34,7 @@ def format_tickers(response: Response) -> dict[str, dict[str, str]]:
         formatted_data += ((_sanitize_cik(record['cik_str']), 
                             record['ticker']),)
 
-    return API.Response(fields=(('cik', str), 
-                                      ('ticker', str)), 
-                              data=formatted_data)
+    return API.Response(data=formatted_data)
 
 
 @API.register_endpoint(formatter=format_tickers, fields=(('cik', str), ('ticker', str)))
@@ -66,18 +64,7 @@ def format_submissions(response: Response) -> list[dict]:
                             raw_data['primaryDocument'][ix],
                             bool(raw_data['isXBRL'][ix])),)
     
-    return API.Response(metadata=metadata,
-                              fields=(('ticker', str),
-                                      ('form', str), 
-                                      ('accession_number', str), 
-                                      ('filing_date', str), 
-                                      ('report_date', str), 
-                                      ('file_number', str), 
-                                      ('film_number', str), 
-                                      ('primary_document', str), 
-                                      ('is_xbrl', bool)),
-                              index=('ticker', 'filing_date', 'form'), 
-                              data=formatted_data)
+    return API.Response(metadata=metadata, data=formatted_data)
 
 
 @API.register_endpoint(formatter=format_submissions, fields=(('ticker', str),
@@ -114,17 +101,7 @@ def format_concept(response: Response) -> list[dict]:
                                 record['val'], 
                                 record['accn']),)
 
-    return API.Response(metadata=metadata,
-                              fields=(('ticker', str),
-                                      ('concept', str),
-                                      ('unit', str),
-                                      ('fiscal_year', int),
-                                      ('fiscal_period', str),
-                                      ('form', str),
-                                      ('value', float),
-                                      ('accession_number', str)),
-                              index=('concept', 'unit', 'fiscal_year', 'fiscal_period'),
-                              data=formatted_data)
+    return API.Response(metadata=metadata, data=formatted_data)
 
 
 @API.register_endpoint(formatter=format_concept, fields=(('ticker', str),
@@ -167,20 +144,7 @@ def format_facts(response: Response):
                                         record['form'], 
                                         record['filed']),)
 
-    return API.Response(metadata=metadata,
-                              fields=(('ticker', str),
-                                      ('taxonomy', str),
-                                      ('line_item', str),
-                                      ('unit', str),
-                                      ('label', str),
-                                      ('description', str),
-                                      ('end', str),
-                                      ('accession_number', str),
-                                      ('fiscal_year', int),
-                                      ('fiscal_period', str),
-                                      ('form', str),
-                                      ('filed', bool)),
-                              data=formatted_data)
+    return API.Response(metadata=metadata, data=formatted_data)
 
 
 @API.register_endpoint(formatter=format_facts, fields=(('ticker', str),
@@ -226,22 +190,7 @@ def format_frame(response: Response) -> API.FormattedResponse:
                             record['end'], 
                             record['val']),)
     
-    return API.Response(metadata=metadata,
-                              fields=(('period', str),
-                                      ('taxonomy', str),
-                                      ('tag', str),
-                                      ('ccp', str),
-                                      ('uom', str),
-                                      ('label', str),
-                                      ('description', str),
-                                      ('accession_number', str),
-                                      ('ticker', str),
-                                      ('entity_name', str),
-                                      ('location', str),
-                                      ('end', str),
-                                      ('value', float)),
-                              data=formatted_data, 
-                              index=('period', 'ticker', 'tag'))
+    return API.Response(metadata=metadata, data=formatted_data)
 
 
 def _last_period():

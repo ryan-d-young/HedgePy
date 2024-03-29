@@ -71,11 +71,12 @@ class Connection:
             self.buffer += await asyncio.wait_for(
                 self._reader.readuntil(Connection.MSG_SEP),
                 timeout=0.2)  # matches EClient's timeout
-            print(self.buffer)
         except asyncio.TimeoutError:
-            return 0
-        else:
-            return len(self.buffer)        
+            pass
+        except asyncio.IncompleteReadError as e:
+            self.buffer += e.partial
+        print(self.buffer)
+        return len(self.buffer)        
     
     async def transfer_all(self) -> AsyncGenerator[int, None]:
         while await (n := self.transfer()) > 0:
@@ -123,12 +124,11 @@ class BaseClient(EWrapper, EClient):
         self.host, self.port = connection._conninfo
         self.connState = BaseClient.DISCONNECTED        
         self.clientId = client_id
-        self.msg_queue = asyncio.LifoQueue()
-
+        
         # Internal attrs
         self._started = False
         
-    async def handshake(self):
+    async def handshake(self, retry: int = 0):
         """Part of the connection process -- never called outside of connect() method.
         
         Sends message in the form of "API\0v{MIN_CLIENT_VER}..{MAX_CLIENT_VER}"; 
@@ -140,11 +140,19 @@ class BaseClient(EWrapper, EClient):
         self.decoder = Decoder(self.wrapper, None)  # server version is initially unset
 
         """  TODO  """
-        _ = await self.conn._reader.readuntil(Connection.FIELD_SEP*3)  # flush null bytes at front of stream
-        server_version_msg = await self.conn._reader.readuntil(Connection.FIELD_SEP)  # followed by server version, null
-        server_version = str(server_version_msg).split("\\")[1][-3:]  # strip null bytes from server version
-        conn_time_msg = await self.conn._reader.readuntil(Connection.FIELD_SEP)  # followed by connection time, null
-        conn_time = str(conn_time_msg).split("\\")[0]  # strip null bytes from connection time
+        try: 
+            _ = await self.conn._reader.readuntil(Connection.MSG_SEP)  # flush null bytes at front of stream
+            server_version_msg = await self.conn._reader.readuntil(Connection.FIELD_SEP)  # followed by server version, null
+            server_version = str(server_version_msg).split("\\")[1][-3:]  # strip null bytes from server version
+            conn_time_msg = await self.conn._reader.readuntil(Connection.FIELD_SEP)  # followed by connection time, null
+            conn_time = str(conn_time_msg).split("\\")[0]  # strip null bytes from connection time
+        except (asyncio.TimeoutError, asyncio.IncompleteReadError, BrokenPipeError):
+            if retry < BaseClient.MAX_RETRIES:
+                print("Handshake failed. Retrying...", retry+1)
+                await asyncio.sleep(0.1)
+                await self.handshake(retry=retry+1)
+            else:
+                raise ConnectionError("Handshake failed.")
         """ The irregularity of how data is received as part of the handshake process precludes us from using methods 
         under Connection to read the data. IBKR's solution is similarly ugly; an elegant solution is TODO."""
 
@@ -193,9 +201,7 @@ class BaseClient(EWrapper, EClient):
         Returns:
             tuple[Any | None]: A tuple containing the fields of the message.
         """
-        if (n := len(self.conn.buffer)) <= 4:
-            n = await self.conn.transfer()
-        if n > 4:
+        if await self.conn.transfer() > 4:
             msg: bytes = self.conn.read()
             fields: tuple[Any] = comm.read_fields(msg)
             return fields
@@ -475,7 +481,7 @@ class App:
         try: 
             response = await self.client.recv()
         except asyncio.QueueEmpty:
-            pass
+            await asyncio.sleep(1)
         else:
             if response is not None:
                 request_id, *fields = response
@@ -497,12 +503,11 @@ class App:
         while self._running:
             try: 
                 await self._cycle()
-                await asyncio.sleep(self.PERIOD_MS/1e3)
                 print("App cycle")
             except KeyboardInterrupt:
                 await self.stop()
-        else:
-            await self.client.disconnect()
+            finally: 
+                await asyncio.sleep(self.PERIOD_MS/1e3)
             
     async def start(self):
         self._running = True

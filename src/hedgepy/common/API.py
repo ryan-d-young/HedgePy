@@ -23,6 +23,7 @@ class VendorSpec:
     app_constructor: Callable | None = None
     app_constructor_kwargs: dict | None = None
     app_runner: Callable | None = None
+    app_instance: object | None = None
     getters: dict[str, Callable] | None = None
     
     def __post_init__(self):

@@ -14,7 +14,7 @@ stop = [20, 0, 0]  # H, M, S
 interval = 15  # S
 
 [api.ibkr]
-host = "localhost"
+host = "127.0.0.1"
 port = 4002
 client_id = 100
 
