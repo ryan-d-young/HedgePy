@@ -1,7 +1,7 @@
 from hedgepy.common import API
 from hedgepy.common.vendors.ibkr.impl import (
     construct_app, run_app, get_account_summary, get_contract_details, 
-    get_historical_data, get_historical_ticks, get_realtime_ticks, get_realtime_bars)
+    get_historical_bars, get_historical_ticks, get_realtime_ticks, get_realtime_bars)
 
 
 endpoint = API.VendorSpec(
@@ -14,9 +14,9 @@ endpoint = API.VendorSpec(
     getters={
         "account_summary": get_account_summary,
         "contract_details": get_contract_details,
-        "historical_data": get_historical_data,
+        "historical_bars": get_historical_bars,
         "historical_ticks": get_historical_ticks,
-        "realtime_ticks": get_realtime_ticks,
-        "realtime_bars": get_realtime_bars
+        "realtime_bars": get_realtime_bars,
+        "realtime_ticks": get_realtime_ticks
     },
 )

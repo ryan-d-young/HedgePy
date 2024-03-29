@@ -99,10 +99,6 @@ class Response:
     def __post_init__(self):
         if not self.corr_id:
             self.corr_id = str(uuid4())
-                
-
-"""Note: we cannot subclass APIResponse in APIFormattedResponse as doing so clashes with dataclass inheritance"""
-"""Unfortunately this means manually copiying APIResponse's __init__ signature before expanding upon it"""
 
 
 @dataclass

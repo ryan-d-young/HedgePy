@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from collections import UserDict
 from importlib import import_module
 from inspect import signature
-from typing import Callable, Coroutine
+from typing import Coroutine
 
 from hedgepy.common import API
 
@@ -80,10 +80,9 @@ class Server:
         self._running: bool = False
         self._started: bool = False
         self._site: web.TCPSite | None = None
+        self._runner: web.ServerRunner | None = None
         self._request_queue: asyncio.PriorityQueue = asyncio.PriorityQueue()
         self._responses: ResponseManager = ResponseManager()
-        self._sockets: dict[str, API.Socket] = {}
-        self._tokens: dict[str, str] = {}
         self._vendors = {}
 
     def __init__(self, root: str):
@@ -93,38 +92,26 @@ class Server:
                 import_module(f'hedgepy.common.vendors.{vendor.stem}')
                 .endpoint
                 )
-            self._sockets[vendor.stem] = None
-            self._tokens[vendor.stem] = None
 
-    async def _vendor_init(self, vendor: str, endpoint: API.VendorSpec) -> Coroutine | None:
-        async def _coro(func: Callable) -> Coroutine:
-            return func()
-        coro = None
-        if endpoint.app_constructor: 
-            coro = endpoint.app_constructor(
-                *endpoint.app_constructor_args, 
-                **endpoint.app_constructor_kwargs
-                )
-            if not asyncio.iscoroutine(coro):
-                coro = _coro(coro)
-        return coro
+    def _vendor_init(self, spec: API.VendorSpec) -> Coroutine | None:
+        if spec.app_constructor:
+            app = spec.app_constructor(**spec.app_constructor_kwargs)
+            spec.app_instance = app
+        if spec.app_runner:
+            return spec.app_runner(app)
 
     async def _ainit(self):
         server = web.Server(self._handler)
-        runner = web.ServerRunner(server)
-        await runner.setup()
-        self._site = web.TCPSite(runner, 'localhost', 8080)
+        self._runner = web.ServerRunner(server)
+        await self._runner.setup()
+        self._site = web.TCPSite(self._runner, 'localhost', 8080)
         await self._site.start()
 
-        tasks = []
-        for vendor, endpoint in self._vendors.items():
-            task = await self._vendor_init(vendor, endpoint)
-            if task: 
-                tasks.append(task)
+        tasks = filter(lambda x: x is not None, map(self._vendor_init, self._vendors.values()))
+        await asyncio.gather(*tuple(tasks))
 
         self._started = True
-        return tasks
-    
+
     async def _handle_put(self, request: web.BaseRequest) -> web.Response:
         request_bytes = await request.read()
         ...
@@ -142,8 +129,8 @@ class Server:
         request_js = await request.json()
         endpoint = self._vendors[request_js['vendor']]
         request_task = Task.from_request(request=request_js, endpoint=endpoint)
-        self._request_queue.put_nowait(request_task)
-        return web.json_response({'corr_id': request_task.corr_id})        
+        await self._request_queue.put(request_task)
+        return web.json_response({'corr_id': request_task.corr_id})
 
     async def _handler(self, request: web.BaseRequest):
         try: 
@@ -161,39 +148,36 @@ class Server:
 
     async def _next_request(self) -> Task | None:
         if not self._request_queue.empty():
-            return self._request_queue.get_nowait()
+            return await self._request_queue.get()
         else:
             return None
 
-    @property
-    def started(self) -> bool:
-        return self._started
-
-    @property
-    def running(self) -> bool:
-        return self._started and self._running
-
-    def vendor(self, name: str) -> API.VendorSpec:
-        return self._vendors[name]
-
-    @property
-    def vendors(self) -> dict[str, API.VendorSpec]:
-        return self._vendors
+    async def _cycle(self):
+        if request := await self._next_request():
+            response = await request
+            await self._responses.__setitem__(request.corr_id, response)
+        print("Server cycle")
 
     async def run(self):
-        if self.started:
-            self._running = True
-            while self.running:
-                print("Server cycle")
-                if request := await self._next_request():
-                    response = await request
-                    await self._responses.__setitem__(request.corr_id, response)
-                await asyncio.sleep(self.CYCLE_MS/1e3)
-        else:
-            raise RuntimeError('Server not running')
+        if not self._started:
+            raise RuntimeError('Server not started')
+        self._running = True
+        while self._running:
+            try: 
+                await asyncio.gather(self._cycle(), asyncio.sleep(self.CYCLE_MS/1e3))  # limits to 20Hz or slower
+            except KeyboardInterrupt:
+                await self.stop()
+
+    async def _stop_vendors(self):
+        for vendor in self._vendors.values():
+            if vendor.app_instance and hasattr(vendor.app_instance, 'stop'):
+                coro_or_none = vendor.app_instance.stop()
+                if asyncio.iscoroutine(coro_or_none):
+                    await coro_or_none
 
     async def stop(self):
         self._running = False
         await self._site.stop()
         await self._runner.cleanup()
         self._cleanup()
+        await self._stop_vendors()

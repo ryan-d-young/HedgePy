@@ -137,7 +137,7 @@ def get_realtime_bars(app: App, symbol: str) -> API.Response:
             ("low", float),
             ("close", float),
             ("volume", int)))
-def get_historical_data(app: App, symbol: str, start: datetime, end: datetime, resolution: timedelta) -> API.Response:
+def get_historical_bars(app: App, symbol: str, start: datetime, end: datetime, resolution: timedelta) -> API.Response:
     request_id = app.client.get_request_id()
     duration_str, bar_size_str = reconcile_duration_bar_size(
         resolve_duration(start, end), resolve_bar_size(resolution))
