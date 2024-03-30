@@ -1,4 +1,4 @@
-from hedgepy.common import API
+from hedgepy.common.api import API
 from hedgepy.common.vendors.fred import fred
 
 endpoint = API.VendorSpec(

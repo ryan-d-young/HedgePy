@@ -2,7 +2,7 @@
 
 import math
 import requests
-from hedgepy.common import API
+from hedgepy.common.api import API
 
 
 
@@ -26,12 +26,12 @@ def format_category(response: requests.Response):
     return API.Response(fields=(('category_id', int), ('name', str), ('parent_id', int)), data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_category, fields=(('category_id', int), ('name', str), ('parent_id', int)))
+@API.register_getter(formatter=format_category, fields=(('category_id', int), ('name', str), ('parent_id', int)))
 def get_category(category: int = 0):
     return request_category(category=category)
 
 
-@API.register_endpoint(formatter=format_category, fields=(('category_id', int), ('name', str), ('parent_id', int)))
+@API.register_getter(formatter=format_category, fields=(('category_id', int), ('name', str), ('parent_id', int)))
 def get_category_children(category: int = 0):
     return request_category(category=category, attribute='children')
 
@@ -50,7 +50,7 @@ def format_category_series(response: requests.Response):
         formatted_data += (item['id'],)
     return API.Response(metadata=metadata, fields=(('series_id', str),), data=formatted_data)
 
-@API.register_endpoint(formatter=format_category_series, fields=(('series_id', str),))
+@API.register_getter(formatter=format_category_series, fields=(('series_id', str),))
 def get_category_series(category: int = 0, offset: int = 0):
     return request_category(category=category, attribute='series', offset=offset)
 
@@ -64,7 +64,7 @@ def format_category_tags(response: requests.Response):
     return API.Response(metadata=metadata, fields=(('name', str), ('group_id', str)), data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_category_tags, fields=(('name', str), ('group_id', str)))
+@API.register_getter(formatter=format_category_tags, fields=(('name', str), ('group_id', str)))
 def get_category_tags(category: int = 0, offset: int = 0):
     return request_category(category=category, attribute='tags', offset=offset)
 
@@ -82,7 +82,7 @@ def format_releases(response: requests.Response):
         formatted_data += (record,)
     return API.Response(metadata=metadata, fields=(('release_id', str), ('link', str)), data=formatted_data)
 
-@API.register_endpoint(formatter=format_releases, fields=(('release_id', str), ('link', str)))
+@API.register_getter(formatter=format_releases, fields=(('release_id', str), ('link', str)))
 def get_releases():
     return get(directory=(('fred', 'releases'),))
 
@@ -96,7 +96,7 @@ def format_releases_dates(response: requests.Response):
     return API.Response(metadata=metadata, fields=(('release_id', str), ('date', str)), data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_releases_dates, fields=(('release_id', str), ('date', str)))
+@API.register_getter(formatter=format_releases_dates, fields=(('release_id', str), ('date', str)))
 def get_releases_dates(offset: int = 0):
     return get(directory=(('fred', 'releases', 'dates')), tags={'offset': offset})
 
@@ -114,7 +114,7 @@ def format_release(response: requests.Response):
     return API.Response(fields=(('release_id', str), ('name', str), ('link', str)), data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_release, fields=(('release_id', str), ('name', str), ('link', str)))
+@API.register_getter(formatter=format_release, fields=(('release_id', str), ('name', str), ('link', str)))
 def get_release(release_id: int = 53):  # GDP
     return get(directory=(('fred', 'release',)), tags={'release_id': release_id})
 
@@ -128,7 +128,7 @@ def format_release_dates(response: requests.Response):
     return API.Response(metadata=metadata, fields=(('release_id', str), ('date', str)), data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_release_dates, fields=(('release_id', str), ('date', str)))
+@API.register_getter(formatter=format_release_dates, fields=(('release_id', str), ('date', str)))
 def get_release_dates(release_id: int = 53, offset: int = 0):
     return get(directory=(('fred', 'release', 'dates')), tags={'release_id': release_id, 'offset': offset})
 
@@ -142,7 +142,7 @@ def format_release_series(response: requests.Response):
     return API.Response(metadata=metadata, fields=(('series_id', str),), data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_release_series, fields=(('series_id', str),))
+@API.register_getter(formatter=format_release_series, fields=(('series_id', str),))
 def get_release_series(release_id: int = 53, offset: int = 0):
     return get(directory=(('fred', 'release', 'series')), tags={'release_id': release_id, 'offset': offset})
 
@@ -156,7 +156,7 @@ def format_release_tags(response: requests.Response):
     return API.Response(metadata=metadata, fields=(('name', str), ('group_id', str)), data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_release_tags, fields=(('name', str), ('group_id', str)))
+@API.register_getter(formatter=format_release_tags, fields=(('name', str), ('group_id', str)))
 def get_release_tags(release_id: int = 53, offset: int = 0):
     return get(directory=(('fred', 'release', 'tags')), tags={'release_id': release_id, 'offset': offset})
 
@@ -191,7 +191,7 @@ def format_release_tables(response: requests.Response):
         data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_release_tables, fields=(('name', str), ('element_id', str), ('series_id', str), ('parent_id', str), ('type', str), ('level', int), ('children', int)))
+@API.register_getter(formatter=format_release_tables, fields=(('name', str), ('element_id', str), ('series_id', str), ('parent_id', str), ('type', str), ('level', int), ('children', int)))
 def get_release_tables(release_id: int = 53, element_id: int | None = None, offset: int = 0):
     tags = {'release_id': release_id, 'offset': offset}
     if element_id:
@@ -222,7 +222,7 @@ def format_series(response: requests.Response):
                                     data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_series, fields=(('series_id', str),
+@API.register_getter(formatter=format_series, fields=(('series_id', str),
                                             ('title', str),
                                             ('observation_start', str), 
                                             ('observation_end', str), 
@@ -242,7 +242,7 @@ def format_series_categories(response: requests.Response):
     return API.Response(fields=(('category_id', int), ('name', str), ('parent_id', int)), data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_series_categories, fields=(('category_id', int), ('name', str), ('parent_id', int)))
+@API.register_getter(formatter=format_series_categories, fields=(('category_id', int), ('name', str), ('parent_id', int)))
 def get_series_categories(series_id: str = "GNPCA"):
     return get(directory=(('fred', 'series', 'categories')), tags={'series_id': series_id})
 
@@ -260,7 +260,7 @@ def format_series_observations(response: requests.Response):
                               data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_series_observations, fields=(('date', str), ('series_id', str), ('value', str)))
+@API.register_getter(formatter=format_series_observations, fields=(('date', str), ('series_id', str), ('value', str)))
 def get_series_observations(series_id: str = "GNPCA", observation_start: str = "2000-01-01", observation_end: str = "2020-01-01"):
     return get(directory=(('fred', 'series', 'observations')), tags={'series_id': series_id, 'observation_start': observation_start, 'observation_end': observation_end})
 
@@ -278,7 +278,7 @@ def format_series_release(response: requests.Response):
     return API.Response(fields=(('release_id', str), ('name', str), ('link', str)), data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_series_release, fields=(('release_id', str), ('name', str), ('link', str)))
+@API.register_getter(formatter=format_series_release, fields=(('release_id', str), ('name', str), ('link', str)))
 def get_series_release(series_id: str = "GNPCA"):
     return get(directory=(('fred', 'series', 'release')), tags={'series_id': series_id})
 
@@ -292,7 +292,7 @@ def format_series_tags(response: requests.Response):
     return API.Response(fields=(('name', str), ('group_id', str)), data=formatted_data, metadata=metadata)
 
 
-@API.register_endpoint(formatter=format_series_tags, fields=(('name', str), ('group_id', str)))
+@API.register_getter(formatter=format_series_tags, fields=(('name', str), ('group_id', str)))
 def get_series_tags(series_id: str = "GNPCA"):
     return get(directory=(('fred', 'series', 'tags')), tags={'series_id': series_id})
 
@@ -306,7 +306,7 @@ def format_series_updates(response: requests.Response):
     return API.Response(fields=(('series_id', str), ('last_updated', str)), data=formatted_data, metadata=metadata)
 
 
-@API.register_endpoint(formatter=format_series_updates, fields=(('series_id', str), ('last_updated', str)))
+@API.register_getter(formatter=format_series_updates, fields=(('series_id', str), ('last_updated', str)))
 def get_series_updates(series_id: str = "GNPCA", offset: int = 0):
     return get(directory=(('fred', 'series', 'updates')), tags={'series_id': series_id, 'offset': offset})
 
@@ -320,7 +320,7 @@ def format_series_vintage_dates(response: requests.Response):
     return API.Response(fields=(('vintage_date', str),), data=formatted_data, metadata=metadata)
 
 
-@API.register_endpoint(formatter=format_series_vintage_dates, fields=(('vintage_date', str),))
+@API.register_getter(formatter=format_series_vintage_dates, fields=(('vintage_date', str),))
 def get_series_vintage_dates(series_id: str = "GNPCA", offset: int = 0):
     return get(directory=(('fred', 'series', 'vintagedates')), tags={'series_id': series_id, 'offset': offset})
 
@@ -339,7 +339,7 @@ def format_sources(response: requests.Response):
     return API.Response(fields=(('source_id', str), ('name', str), ('link', str)), data=formatted_data, metadata=metadata)
 
 
-@API.register_endpoint(formatter=format_sources, fields=(('source_id', str), ('name', str), ('link', str)))
+@API.register_getter(formatter=format_sources, fields=(('source_id', str), ('name', str), ('link', str)))
 def get_sources(offset: int = 0):
     return get(directory=(('fred', 'sources'),), tags={'offset': offset})
 
@@ -353,7 +353,7 @@ def format_tags(response: requests.Response):
     return API.Response(fields=(('name', str), ('group_id', str)), data=formatted_data, metadata=metadata)
 
 
-@API.register_endpoint(formatter=format_tags, fields=(('name', str), ('group_id', str)))
+@API.register_getter(formatter=format_tags, fields=(('name', str), ('group_id', str)))
 def get_tags():
     return get(directory=(('fred', 'tags'),))
 
@@ -367,6 +367,6 @@ def format_tags_series(response: requests.Response):
     return API.Response(fields=(('series_id', str),), data=formatted_data, metadata=metadata)
 
 
-@API.register_endpoint(formatter=format_tags_series, fields=(('series_id', str),))
+@API.register_getter(formatter=format_tags_series, fields=(('series_id', str),))
 def get_tags_series(tag_names: str = "usa", offset: int = 0):
     return get(directory=(('fred', 'tags', 'series')), tags={'tag_names': tag_names, 'offset': offset})

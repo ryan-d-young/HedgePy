@@ -1,12 +1,12 @@
 import dotenv
 import tomllib
 from pathlib import Path
-from typing import Iterable
+from dataclasses import dataclass
 
 
 PROJECT_ROOT = dotenv.get_key(
-    dotenv_path=dotenv.find_dotenv(),
-    key_to_get='PROJECT_ROOT'
+    dotenv_path = dotenv.find_dotenv(),
+    key_to_get = 'PROJECT_ROOT'
     )
 SOURCE_ROOT = (Path(PROJECT_ROOT) / 'src' / 'hedgepy').resolve()
 
@@ -81,3 +81,14 @@ def replace(value: str | tuple | dict) -> str | tuple | dict:
         return _replace_dict(value)
     else:
         raise ValueError(f"Unsupported type: {type(value)}")
+
+
+@dataclass
+class EnvironmentVariable:
+    name: str
+    value: str
+    
+    @classmethod
+    def from_config(cls, key: str):
+        return cls(name=key, value=get(key))
+    

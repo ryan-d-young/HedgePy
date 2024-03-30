@@ -1,4 +1,4 @@
-from hedgepy.common import API
+from hedgepy.common.api import API
 from hedgepy.common.vendors.edgar import edgar
 
 endpoint = API.VendorSpec(

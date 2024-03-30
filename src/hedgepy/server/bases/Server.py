@@ -8,7 +8,7 @@ from importlib import import_module
 from inspect import signature, Parameter
 from typing import Coroutine, Callable
 
-from hedgepy.common import API
+from hedgepy.common.api import API
 
 
 class Task(asyncio.Task):    
@@ -168,7 +168,7 @@ class Server(VendorMixin, WebMixin):
         self._cleanup()
         self.vendors = self.load_vendors(root)
 
-    async def _next_request(self) -> Task | None:
+    async def _next_request(self) -> Coroutine | None:
         try:
             return await self._request_queue.get()
         except asyncio.QueueEmpty:

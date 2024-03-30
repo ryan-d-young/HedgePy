@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from uuid import UUID
 from aiohttp import ClientSession
 
-from hedgepy.common import API
+from hedgepy.common.api import API
 
 
 @dataclass

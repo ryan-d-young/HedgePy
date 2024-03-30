@@ -2,7 +2,8 @@
 
 from datetime import timedelta
 
-from hedgepy.common import API, template
+from hedgepy.common.api import template
+from hedgepy.common.api import API
 from hedgepy.server.bases.Data import cast
 from hedgepy.server.bases.Agent import ScheduleItem, Schedule
 

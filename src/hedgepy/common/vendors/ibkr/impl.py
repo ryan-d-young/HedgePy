@@ -5,7 +5,7 @@ from ibapi.common import BarData, HistoricalTick, ListOfHistoricalTick, TagValue
 from ibapi.contract import Contract, ContractDetails
 from ibapi.account_summary_tags import AccountSummaryTags
 
-from hedgepy.common import API
+from hedgepy.common.api import API
 from hedgepy.common.vendors.ibkr.bases import Client, App
 
 
@@ -113,7 +113,7 @@ def reconcile_duration_bar_size(duration_str: str, bar_size_str: str) -> tuple[s
     return duration_str, bar_size_str
 
 
-@API.register_endpoint(
+@API.register_getter(
     fields=(("account", str),
             ("tag", str),
             ("value", str),
@@ -126,7 +126,7 @@ def get_account_summary(app: App) -> API.Response:
     return API.Response(corr_id=request_id)
 
 
-@API.register_endpoint(
+@API.register_getter(
     fields=(("time", float), 
             ("open", float),
             ("high", float),
@@ -144,7 +144,7 @@ def get_realtime_bars(app: App, symbol: str) -> API.Response:
     return API.Response(corr_id=request_id)
 
 
-@API.register_endpoint(
+@API.register_getter(
     fields=(("date", str),
             ("open", float),
             ("high", float),
@@ -171,7 +171,7 @@ def get_historical_bars(app: App, symbol: str, start: datetime, end: datetime, r
     return API.Response(corr_id=request_id)
 
 
-@API.register_endpoint(
+@API.register_getter(
     fields=(("time", float),
             ("price", float),
             ("size", float)),)
@@ -190,7 +190,7 @@ def get_historical_ticks(app: App, symbol: str, end: datetime) -> API.Response:
     return API.Response(corr_id=request_id)
 
 
-@API.register_endpoint(
+@API.register_getter(
     fields=(("tick_type", int),
             ("price", float)),
     streaming=True)
@@ -207,7 +207,7 @@ def get_realtime_ticks(app: App, symbol: str) -> API.Response:
     return API.Response(corr_id=request_id)
 
 
-@API.register_endpoint(
+@API.register_getter(
     fields=(("label", str),
             ("value", str))
 )

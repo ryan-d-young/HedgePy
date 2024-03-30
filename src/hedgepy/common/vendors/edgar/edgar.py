@@ -1,5 +1,5 @@
 from requests import Response
-from hedgepy.common import API
+from hedgepy.common.api import API
 
 
 _company = API.EnvironmentVariable.from_config("$api.edgar.company")
@@ -37,7 +37,7 @@ def format_tickers(response: Response) -> dict[str, dict[str, str]]:
     return API.Response(data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_tickers, fields=(('cik', str), ('ticker', str)))
+@API.register_getter(formatter=format_tickers, fields=(('cik', str), ('ticker', str)))
 def get_tickers():
     return _get_tickers()
 
@@ -67,7 +67,7 @@ def format_submissions(response: Response) -> list[dict]:
     return API.Response(metadata=metadata, data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_submissions, fields=(('ticker', str),
+@API.register_getter(formatter=format_submissions, fields=(('ticker', str),
                                                             ('form', str), 
                                                             ('accession_number', str), 
                                                             ('filing_date', str), 
@@ -104,7 +104,7 @@ def format_concept(response: Response) -> list[dict]:
     return API.Response(metadata=metadata, data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_concept, fields=(('ticker', str),
+@API.register_getter(formatter=format_concept, fields=(('ticker', str),
                                                           ('concept', str),
                                                           ('unit', str),
                                                           ('fiscal_year', int),
@@ -147,7 +147,7 @@ def format_facts(response: Response):
     return API.Response(metadata=metadata, data=formatted_data)
 
 
-@API.register_endpoint(formatter=format_facts, fields=(('ticker', str),
+@API.register_getter(formatter=format_facts, fields=(('ticker', str),
                                                       ('taxonomy', str),
                                                       ('line_item', str),
                                                       ('unit', str),
@@ -200,7 +200,7 @@ def _last_period():
     return f"CY{int(year) - 1}Q4I" if int(month) - 3 < 0 else f"CY{int(year)}Q{ceil(4 * (int(month)/12))}I"
 
 
-@API.register_endpoint(formatter=format_frame, fields=(('period', str),
+@API.register_getter(formatter=format_frame, fields=(('period', str),
                                                       ('taxonomy', str),
                                                       ('tag', str),
                                                       ('ccp', str),
