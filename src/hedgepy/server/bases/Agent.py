@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from uuid import UUID
 from aiohttp import ClientSession
 
-from hedgepy.common.api import API
+from hedgepy.common.api.bases import API
 
 
 @dataclass
 class ScheduleItem:
-    request: API.Request
+    request: API.RequestParams
     interval: int | None = None
 
 
@@ -30,7 +30,7 @@ class Consumer:
         self._url = f"http://{env['SERVER_HOST']}:{env['SERVER_PORT']}"
         self._session = ClientSession()
     
-    async def post(self, request: API.Request) -> UUID:
+    async def post(self, request: API.RequestParams) -> UUID:
         async with self._session.post(self._url, json=request.js) as response:
             resp = await response.json()
             return UUID(resp['corr_id'])

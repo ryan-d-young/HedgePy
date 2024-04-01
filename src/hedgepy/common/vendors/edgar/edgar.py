@@ -1,5 +1,5 @@
 from requests import Response
-from hedgepy.common.api import API
+from hedgepy.common.api.bases import API
 
 
 _company = API.EnvironmentVariable.from_config("$api.edgar.company")

@@ -1,48 +1,33 @@
-import yarl
+from typing import Any
+
 import aiohttp
-from typing import Any, Callable, Coroutine
-from dataclasses import dataclass, asdict
-from uuid import uuid4, UUID
+from yarl import URL
 
-from hedgepy.common.utils import config
+from .bases import API, Data
 
 
-@dataclass
-class SessionSpec:
-    host: str
-    scheme: str = "http"
-    port: int | None = None
-    key: str | None = None
-    headers: dict[str, str] | None = None
-    cookies: dict[str, str] | None = None
+def new_session(spec: API.HTTPSessionSpec) -> aiohttp.ClientSession:
+    return aiohttp.ClientSession(
+        base_url=URL(host=spec.host, scheme=spec.scheme, port=spec.port),
+        headers=spec.headers,
+        cookies=spec.cookies
+    )
 
-    def __post_init__(self):
-        self.url = yarl.URL.build(scheme=self.scheme, host=self.host, port=self.port)
-        
-        
-@dataclass
-class Request:
-    method: str = "GET"
-    headers: dict[str, str] | None = None
-    params: dict[str, str] | None = None
-    data: aiohttp.FormData | None = None
-    
-    def __post_init__(self):
-        self._corr_id: UUID = uuid4()
 
-        
-class Session:
-    def __init__(self, spec: SessionSpec):
-        self.url: yarl.URL = spec.url
-        self._spec: SessionSpec = spec
-        self._session: aiohttp.ClientSession | None = None
-        
-    async def _ainit(self):
-        self._session = aiohttp.ClientSession(
-            cookies=self._spec.cookies,
-            headers=self._spec.headers
-            )
-        
-    async def request(self, req: Request) -> Coroutine:
-        kwargs = asdict(req)
-        return self._session.request(url=self.url, **kwargs)    
+def request(
+    session: aiohttp.ClientSession,
+    corr_id: API.CorrID,
+    url: str,
+    **kwargs,
+) -> tuple[API.CorrID, aiohttp.client._RequestContextManager]:
+    return corr_id, session.request(method="get", url=url, **kwargs)
+
+
+async def get(ctx_mgr: aiohttp.client._RequestContextManager, corr_id: API.CorrID) -> API.Response:
+    async with ctx_mgr as response:
+        data = await response.json()
+        return API.Response(corr_id=corr_id, data=data)
+
+
+def format(response: API.Response, data: Any) -> API.Response:
+    return API.Response(corr_id=response.corr_id, data=data)

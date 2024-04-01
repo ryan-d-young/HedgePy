@@ -4,11 +4,10 @@ from pathlib import Path
 from functools import partial
 from uuid import UUID, uuid4
 from collections import UserDict
-from importlib import import_module
 from inspect import signature, Parameter
 from typing import Coroutine, Callable
 
-from hedgepy.common.api import API
+from hedgepy.common.api.bases import API
 
 
 class Task(asyncio.Task):    
@@ -32,12 +31,12 @@ class Task(asyncio.Task):
         return func
     
     @classmethod
-    def from_request(cls, request: API.Request | dict, endpoint: API.VendorSpec) -> "Task":
-        if isinstance(request, API.Request):
+    def from_request(cls, request: API.RequestParams | dict, endpoint: API.VendorSpec) -> "Task":
+        if isinstance(request, API.RequestParams):
             request = request.js        
         
         func_name = request['endpoint']
-        func = endpoint.getters.get(func_name)
+        func = endpoint.endpoints.get(func_name)
 
         for param in signature(func).parameters.values():
             func = cls._bind_param(func, param, request, endpoint)
@@ -77,31 +76,19 @@ class VendorMixin:
     def load_vendors(root: str):
         vendors = {}
         for vendor in (Path(root) / 'common' / 'vendors').iterdir():
-            vendors[vendor.stem] = (
-                import_module(f'hedgepy.common.vendors.{vendor.stem}')
-                .endpoint
-                )
+            vendors[vendor.stem] = API.Vendor.from_module(f"hedgepy.common.vendors.{vendor.stem}")
         return vendors
-    
+
     async def stop_vendors(self):
         for vendor in self.vendors.values():
-            if vendor.app_instance and hasattr(vendor.app_instance, 'stop'):
-                coro_or_none = vendor.app_instance.stop()
-                if asyncio.iscoroutine(coro_or_none):
-                    await coro_or_none
-            
-    @staticmethod
-    def start_vendor(spec: API.VendorSpec) -> Coroutine | None:
-        if spec.app_constructor:
-            app = spec.app_constructor(**spec.app_constructor_kwargs)
-            spec.app_instance = app
-        if spec.app_runner:
-            return spec.app_runner(app)
-        
-    async def start_vendors(self):
-        tasks = filter(lambda coro_or_none: coro_or_none is not None, 
-                       map(self.start_vendor, self.vendors.values()))
-        await asyncio.gather(*tuple(tasks))
+            await vendor.stop()
+
+    async def start_vendors(self) -> tuple[Coroutine]:
+        tasks = filter(
+            lambda coro_or_none: coro_or_none is not None,
+            map(lambda vendor: vendor.start(), self.vendors.values()),
+        )
+        return tuple(tasks)
 
 
 class WebMixin:

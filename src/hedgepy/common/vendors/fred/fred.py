@@ -2,12 +2,27 @@
 
 import math
 import requests
-from hedgepy.common.api import API
+from hedgepy.common.api.bases import API
+from aiohttp import ClientSession
+from typing import Coroutine
 
 
+http_spec = API.HTTPSessionSpec(
+    host="api.stlouisfed.org/fred",
+    scheme="https",
+    params={'api_key': API.EnvironmentVariable("$api.fred.key").value, 'file_type': 'json'}
+    )
 
-_key = API.EnvironmentVariable.from_config("$api.fred.key")
-get = API.bind_rest_get(base_url="https://api.stlouisfed.org", suffix=f'?api_key={_key}&file_type=json')
+
+def get_series_observations(app: ClientSession, params: API.RequestParams) -> Coroutine:
+    return app.get(
+        url="/series/observations", 
+        params={
+            'series_id': params.symbol, 
+            'observation_start': params.start, 
+            'observation_end': params.end
+            }
+        )
 
 
 def request_category(category: int = 0, attribute: str | None = None, **kwargs):

@@ -1,8 +1,8 @@
-from hedgepy.common.api import API
+from hedgepy.common.api.bases import API
 from hedgepy.common.vendors.fred import fred
 
-endpoint = API.VendorSpec(
-    getters={
+spec = API.VendorSpec(
+    endpoints={
         'category': fred.get_category,
         'category_children': fred.get_category_children,
         'category_series': fred.get_category_series,

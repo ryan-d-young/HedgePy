@@ -1,4 +1,5 @@
 import re
+import json
 import datetime
 from typing import TypeVar, Any
 from hedgepy.common.utils.dtwrapper import DATE_RE, TIME_RE, DATETIME_RE, DURATION_RE
@@ -110,14 +111,13 @@ def cast(value: DBValue) -> PyType:
     return cast_re(re_match, py_type)
 
 
-class Data(tuple):
+class Tbl(tuple):
     def __new__(
         cls,
         data: tuple[tuple[Any]],
-        cols: tuple[tuple[str, DBType]] | tuple[tuple[str, PyType]] = None,
-        idx: str | tuple[Any] | None = None
-        ) -> "Data":
-        return super(Data, cls).__new__(cls, data)
+        cols: tuple[tuple[str, DBType]] | tuple[tuple[str, PyType]],
+        ) -> "Tbl":
+        return super(Tbl, cls).__new__(cls, data)
        
     @staticmethod
     def _validate_data(data: tuple[tuple[Any]]) -> int:
@@ -151,27 +151,17 @@ class Data(tuple):
 
         return names, types
 
-    @staticmethod
-    def _validate_idx(idx: Any | tuple[Any], col_names, col_types) -> int:
-        if not isinstance(idx, tuple):
-            if col_names:
-                assert idx in col_names, "Index label not in columns"
-            return 1
-        elif col_names:
-            assert all(map(lambda lbl: lbl in col_names, idx)), "At least one index label not in columns"
-        return len(idx)
-
-    def __init__(self, data, cols, idx):
+    def __init__(self, data, cols):
         self._cols = cols
-        self._idx = idx
 
         n_records, n_cols = self._validate_data(data)
         col_names, col_types = self._validate_cols(cols, n_cols) 
-        n_idx = self._validate_idx(idx, col_names, col_types)
-
+ 
         self._col_names: tuple[Any] = col_names
         self._col_types: tuple[DBType] | tuple[PyType] = col_types
         self._n_records: int = n_records
         self._n_cols: int = n_cols
-        self._n_idx: int = n_idx
         
+    def json(self) -> str:
+        return json.dumps(self)
+    
