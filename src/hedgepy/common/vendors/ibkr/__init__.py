@@ -11,7 +11,7 @@ spec = API.VendorSpec(
         "port": API.EnvironmentVariable.from_config("api.ibkr.port").value,
     },
     app_runner=run_app,
-    endpoints={
+    getters={
         "account_summary": get_account_summary,
         "contract_details": get_contract_details,
         "historical_bars": get_historical_bars,

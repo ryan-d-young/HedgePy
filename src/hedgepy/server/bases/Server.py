@@ -36,7 +36,7 @@ class Task(asyncio.Task):
             request = request.js        
         
         func_name = request['endpoint']
-        func = endpoint.endpoints.get(func_name)
+        func = endpoint.getters.get(func_name)
 
         for param in signature(func).parameters.values():
             func = cls._bind_param(func, param, request, endpoint)

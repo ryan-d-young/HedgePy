@@ -76,6 +76,7 @@ docs/_build/
 target/
 
 # Jupyter Notebook
+.ipynb
 .ipynb_checkpoints
 
 # IPython
@@ -151,3 +152,4 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+nb.ipynb

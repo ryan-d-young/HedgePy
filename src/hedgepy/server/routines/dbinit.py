@@ -18,8 +18,8 @@ async def make_schemas(schemas: tuple[str], database: Database):
 def gather_required(server: Server):
     required = {vendor: {} for vendor in server.vendors}
     for vendor, endpoint in server.vendors.items():
-        for getter in endpoint.endpoints:
-            required[vendor][getter] = endpoint.endpoints[getter].fields
+        for getter in endpoint.getters:
+            required[vendor][getter] = endpoint.getters[getter].fields
     return required
 
 

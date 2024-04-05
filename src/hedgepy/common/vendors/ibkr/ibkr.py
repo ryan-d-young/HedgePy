@@ -114,11 +114,11 @@ def reconcile_duration_bar_size(duration_str: str, bar_size_str: str) -> tuple[s
 
 
 @API.register_getter(
-    fields=(("account", str),
+    returns=(("account", str),
             ("tag", str),
             ("value", str),
             ("currency", str)),
-    streaming=True)
+    streams=True)
 def get_account_summary(app: App) -> API.Response:
     request_id = app.client.get_request_id()
     app.client.reqAccountSummary(
@@ -127,7 +127,7 @@ def get_account_summary(app: App) -> API.Response:
 
 
 @API.register_getter(
-    fields=(("time", float), 
+    returns=(("time", float), 
             ("open", float),
             ("high", float),
             ("low", float),
@@ -135,7 +135,7 @@ def get_account_summary(app: App) -> API.Response:
             ("volume", int),
             ("wap", float),
             ("count", int)),
-    streaming=True)
+    streams=True)
 def get_realtime_bars(app: App, symbol: str) -> API.Response:
     request_id = app.client.get_request_id()
     contract = Contract(symbol=symbol)
@@ -145,7 +145,7 @@ def get_realtime_bars(app: App, symbol: str) -> API.Response:
 
 
 @API.register_getter(
-    fields=(("date", str),
+    returns=(("date", str),
             ("open", float),
             ("high", float),
             ("low", float),
@@ -172,7 +172,7 @@ def get_historical_bars(app: App, symbol: str, start: datetime, end: datetime, r
 
 
 @API.register_getter(
-    fields=(("time", float),
+    returns=(("time", float),
             ("price", float),
             ("size", float)),)
 def get_historical_ticks(app: App, symbol: str, end: datetime) -> API.Response:
@@ -191,9 +191,9 @@ def get_historical_ticks(app: App, symbol: str, end: datetime) -> API.Response:
 
 
 @API.register_getter(
-    fields=(("tick_type", int),
+    returns=(("tick_type", int),
             ("price", float)),
-    streaming=True)
+    streams=True)
 def get_realtime_ticks(app: App, symbol: str) -> API.Response:
     request_id = app.client.get_request_id()
     contract = Contract(symbol=symbol)
@@ -208,7 +208,7 @@ def get_realtime_ticks(app: App, symbol: str) -> API.Response:
 
 
 @API.register_getter(
-    fields=(("label", str),
+    returns=(("label", str),
             ("value", str))
 )
 def get_contract_details(app: App, symbol: str) -> API.Response:
