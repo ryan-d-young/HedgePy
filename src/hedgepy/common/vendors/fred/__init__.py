@@ -1,5 +1,15 @@
 from hedgepy.common.api.bases import API
 from hedgepy.common.vendors.fred import fred
+  
+  
+context = API.Context(
+    static_vars={
+        "key": API.EnvironmentVariable("api.fred.key"),
+        "file_type": "json"
+    },
+    derived_vars={"params": lambda self: {"api_key": self.key.value, "file_type": self.file_type}}
+)
+
 
 spec = API.VendorSpec(
     getters={
@@ -12,12 +22,6 @@ spec = API.VendorSpec(
         "series_release": fred.get_series_release,
         "series_vintage_dates": fred.get_series_vintage_dates,
     },
-    app_constructor_kwargs=API.HTTPSessionSpec(
-        host="api.stlouisfed.org",
-        scheme="https",
-        params={
-            "api_key": API.EnvironmentVariable("$api.fred.key").value,
-            "file_type": "json",
-        },
-    ),
+    app_constructor=API.HTTPSessionSpec(host="api.stlouisfed.org", scheme="https"),
+    context=context
 )

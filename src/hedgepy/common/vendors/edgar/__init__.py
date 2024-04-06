@@ -2,6 +2,15 @@ from hedgepy.common.api.bases import API
 from hedgepy.common.vendors.edgar import edgar
 
 
+context = API.Context(
+    static_vars={
+        "company": API.EnvironmentVariable("api.edgar.company"),
+        "email": API.EnvironmentVariable("api.edgar.email"),
+    },
+    derived_vars={"user_agent": lambda self: f"{self.company.value} {self.email.value}"},
+)
+
+
 spec = API.VendorSpec(
     getters={
         "tickers": edgar.get_tickers,
@@ -10,12 +19,12 @@ spec = API.VendorSpec(
         "facts": edgar.get_facts,
         "frame": edgar.get_frame,
     },
-    app_constructor_kwargs=API.HTTPSessionSpec(
+    context=context,
+    app_constructor=API.HTTPSessionSpec(
         headers={
             "Accept": "application/json",
             "Accept-Encoding": "gzip, deflate",
-            "User-Agent":\
-        f'{API.EnvironmentVariable("$api.edgar.company").value} {API.EnvironmentVariable("$api.edgar.email").value}',
+            "User-Agent": context.user_agent,
         }
     ),
 )

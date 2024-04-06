@@ -9,11 +9,6 @@ from hedgepy.common.api.bases import API
 from hedgepy.common.vendors.ibkr.bases import Client, App
 
 
-DFMT = "%Y%m%d"
-TFMT = "%H:%M:%S"
-DTFMT = " ".join((DFMT, TFMT))
-
-
 IBKRResponse = dict[TickerId, tuple]
 
 
@@ -119,7 +114,7 @@ def reconcile_duration_bar_size(duration_str: str, bar_size_str: str) -> tuple[s
             ("value", str),
             ("currency", str)),
     streams=True)
-def get_account_summary(app: App) -> API.Response:
+def get_account_summary(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
     request_id = app.client.get_request_id()
     app.client.reqAccountSummary(
         reqId=request_id, group="All", tags=AccountSummaryTags.AllTags)
@@ -136,9 +131,9 @@ def get_account_summary(app: App) -> API.Response:
             ("wap", float),
             ("count", int)),
     streams=True)
-def get_realtime_bars(app: App, symbol: str) -> API.Response:
+def get_realtime_bars(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
     request_id = app.client.get_request_id()
-    contract = Contract(symbol=symbol)
+    contract = Contract(symbol=params.symbol)
     app.client.reqRealTimeBars(
         reqId=request_id, contract=contract, barSize=5, whatToShow="MIDPOINT", useRTH=False)  
     return API.Response(corr_id=request_id)
@@ -151,12 +146,12 @@ def get_realtime_bars(app: App, symbol: str) -> API.Response:
             ("low", float),
             ("close", float),
             ("volume", int)))
-def get_historical_bars(app: App, symbol: str, start: datetime, end: datetime, resolution: timedelta) -> API.Response:
+def get_historical_bars(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
     request_id = app.client.get_request_id()
     duration_str, bar_size_str = reconcile_duration_bar_size(
-        resolve_duration(start, end), resolve_bar_size(resolution))
-    end_datetime_str = end.strftime(DTFMT) if (end < datetime.today()) else ""
-    contract = Contract(symbol=symbol)
+        resolve_duration(params.start, params.end), resolve_bar_size(params.resolution))
+    end_datetime_str = params.end.strftime(context.DTFMT) if (params.end < datetime.today()) else ""
+    contract = Contract(symbol=params.symbol)
     app.client.reqHistoricalData(
         reqId=request_id, 
         contract=contract, 
@@ -175,13 +170,13 @@ def get_historical_bars(app: App, symbol: str, start: datetime, end: datetime, r
     returns=(("time", float),
             ("price", float),
             ("size", float)),)
-def get_historical_ticks(app: App, symbol: str, end: datetime) -> API.Response:
+def get_historical_ticks(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
     request_id = app.client.get_request_id()
-    contract = Contract(symbol=symbol)
+    contract = Contract(symbol=params.symbol)
     app.client.reqHistoricalTicks(
         reqId=request_id, 
         contract=contract, 
-        endDateTime=end.strftime(DTFMT), 
+        endDateTime=params.end.strftime(context.DTFMT), 
         numberOfTicks=1e3, 
         whatToShow="TRADES", 
         useRth=0, 
@@ -218,13 +213,17 @@ def get_contract_details(app: App, symbol: str) -> API.Response:
     return API.Response(corr_id=request_id)
 
 
-def construct_app(host: str, port: int) -> App:
-    return App(host=host, port=port, client_impl=ClientImpl)
+def construct_app(context: API.Context) -> App:
+    return App(host=context.host, port=context.port, client_impl=ClientImpl)
 
 
 async def run_app(app: App):
     await app._ainit()
     await app.start()
+
+
+def corr_id(app: App) -> API.CorrID:
+    return app.request_id()
 
 
 async def test():

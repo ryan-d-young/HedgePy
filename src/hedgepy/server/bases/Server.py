@@ -33,7 +33,7 @@ class Task(asyncio.Task):
     @classmethod
     def from_request(cls, request: API.RequestParams | dict, endpoint: API.VendorSpec) -> "Task":
         if isinstance(request, API.RequestParams):
-            request = request.js        
+            request = request.js
         
         func_name = request['endpoint']
         func = endpoint.getters.get(func_name)

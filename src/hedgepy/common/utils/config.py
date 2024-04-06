@@ -9,6 +9,7 @@ PROJECT_ROOT = dotenv.get_key(
     key_to_get = 'PROJECT_ROOT'
     )
 SOURCE_ROOT = (Path(PROJECT_ROOT) / 'src' / 'hedgepy').resolve()
+PROJECT_NAME = SOURCE_ROOT.stem
 
 
 def _get_env_var(key: str, dotenv_path: str = PROJECT_ROOT) -> str:
