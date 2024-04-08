@@ -205,7 +205,7 @@ class Vendor:
     ):
         self.app = app
         self.context = context
-        self.gettters = getters
+        self.getters = getters
         self.runner = runner
         self.corr_id_fn = corr_id_fn if corr_id_fn else uuid4
         
@@ -244,9 +244,10 @@ class Vendors:
     def __init__(self):
         self._vendors = self.load_vendors(root=config.SOURCE_ROOT)
         
-    def __getitem__(self, vendor: str) -> Vendor:
-        return self._vendors[vendor]
-    
+    @property
+    def vendors(self):
+        return self._vendors
+
     @staticmethod
     def load_vendors(root: str):
         vendors = {}
@@ -264,10 +265,9 @@ class Vendors:
                     vendor.stop()
 
     def start_vendors(self) -> tuple[Awaitable]:
-        tasks = filter(lambda coro_or_none: coro_or_none is not None,
-                       map(lambda vendor: vendor.start(), 
-                           filter(lambda vendor: hasattr(vendor, "start"), self._vendors.values())  # ClientSession does
-                           )                                                                        # not have a start
-                       )                                                                            # method
+        tasks = []
+        for vendor in self._vendors.values():
+            if vendor.runner:
+                tasks.append(vendor.runner(vendor.app))
         return tuple(tasks)  # to be awaited via asyncio.gather(*tasks)
     

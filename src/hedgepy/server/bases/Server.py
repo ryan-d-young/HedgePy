@@ -103,11 +103,25 @@ class Server(BaseServer):
         
     @property
     def vendors(self):
-        return self._vendors
+        return self._vendors.vendors
+    
+    async def start(self):
+        await asyncio.gather(
+            *self._vendors.start_vendors(), 
+            self.start_server(), 
+            self.start_loop()
+            )
+        
+    async def stop(self):
+        await asyncio.gather(
+            self._vendors.stop_vendors(), 
+            self.stop_server(), 
+            self.stop_loop()
+            )
         
     async def cycle(self):
         try: 
-            request: API.Request = await self._request_queue.get()
+            request: API.Request = self._request_queue.get_nowait()
     
             if request: 
                 vendor = self.vendors[request.vendor]
@@ -139,7 +153,13 @@ class Server(BaseServer):
 
     async def _handle_post(self, request: web.BaseRequest) -> web.Response:
         request_js = await request.json()
-        request_obj = API.Request(**request_js)
+        
+        if corr_id_fn := self.vendors[request_js['vendor']].corr_id_fn:
+            corr_id = corr_id_fn()
+        else:
+            corr_id = None
+        
+        request_obj = API.Request(**request_js, corr_id=corr_id)
         await self._request_queue.put(request_obj)
         return web.json_response({'corr_id': request_obj.corr_id})
     

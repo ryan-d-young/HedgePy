@@ -70,7 +70,7 @@ def get_series_observations(
 
 
 @API.register_getter(
-    returns=(("vintage_date", str)), formatter=partial(format, index="vintage_dates")
+    returns=(("vintage_date", str),), formatter=partial(format, index="vintage_dates")
 )
 def get_series_vintage_dates(
     app: ClientSession,

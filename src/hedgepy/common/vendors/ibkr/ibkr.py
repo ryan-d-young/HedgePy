@@ -214,7 +214,7 @@ def get_contract_details(app: App, symbol: str) -> API.Response:
 
 
 def construct_app(context: API.Context) -> App:
-    return App(host=context.host, port=context.port, client_impl=ClientImpl)
+    return App(host=context.host.value, port=context.port.value, client_impl=ClientImpl)
 
 
 async def run_app(app: App):

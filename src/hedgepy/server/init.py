@@ -1,13 +1,12 @@
 import getpass
-from pathlib import Path
 from datetime import timedelta
 from hedgepy.server.routines import dbinit, parse, process
 from hedgepy.server.bases import Server, Database, Agent
 
 
 
-def make_server(root: Path) -> Server.Server:
-    return Server.Server(root)
+def make_server() -> Server.Server:
+    return Server.Server()
 
 
 def make_daemon(
@@ -42,7 +41,7 @@ def make_database(dbname: str, host: str, port: int, user: str, password: str) -
 async def init() -> tuple[Server.Server, Database.Database, Agent.Daemon, Agent.Schedule]:
     from hedgepy.common.utils import config
     
-    server = make_server(config.SOURCE_ROOT)
+    server = make_server()
     
     dbpass = getpass.getpass(prompt='Enter database password: ')
     db = make_database(
