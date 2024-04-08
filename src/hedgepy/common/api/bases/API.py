@@ -10,10 +10,12 @@ from pathlib import Path
 from importlib import import_module
 
 from yarl import URL
+from aiohttp import ClientSession
 
 from hedgepy.common.utils import config
 
 
+App = Any | ClientSession
 AppConstructor = Callable[["Context"], "App"]
 AppRunner = Callable[["App"], Awaitable]
 CorrID = str | int | UUID
@@ -102,22 +104,20 @@ class Request:
         self,
         vendor: str,
         endpoint: str,
-        context: Context,
         params: RequestParams,
         corr_id: CorrID | None = None,
     ):
         self.vendor = vendor
         self.endpoint = endpoint
-        self.context = context
         self.params = params
         self.corr_id = corr_id if corr_id else uuid4()
 
     @property
     def js(self):
         return {
-            "params": self.params,
             "vendor": self.vendor,
             "endpoint": self.endpoint,
+            "params": self.params,
             "corr_id": self.corr_id
             }
 
@@ -208,10 +208,20 @@ class Vendor:
         self.gettters = getters
         self.runner = runner
         self.corr_id_fn = corr_id_fn if corr_id_fn else uuid4
+        
+    def __getitem__(self, endpoint: str) -> Getter:
+        return self.getters[endpoint]
 
     @classmethod
     def from_spec(cls, spec: VendorSpec) -> Self:
-        app = spec.app_constructor(spec.context)
+        if isinstance(spec.app_constructor, HTTPSessionSpec):
+            app = ClientSession(
+                base_url=spec.app_constructor.url(), 
+                headers=spec.app_constructor.headers, 
+                cookies=spec.app_constructor.cookies
+                )
+        else: 
+            app = spec.app_constructor(spec.context)
         return cls(app, spec.context, spec.getters, spec.app_runner, spec.corr_id_fn)
 
     def request(self, endpoint: str, params: RequestParams) -> Request:
@@ -231,8 +241,11 @@ class Vendor:
 
 
 class Vendors:
-    def __init__(self, root: str):
-        self._vendors = self.load_vendors(root)
+    def __init__(self):
+        self._vendors = self.load_vendors(root=config.SOURCE_ROOT)
+        
+    def __getitem__(self, vendor: str) -> Vendor:
+        return self._vendors[vendor]
     
     @staticmethod
     def load_vendors(root: str):
