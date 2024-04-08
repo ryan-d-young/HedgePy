@@ -1,22 +1,24 @@
 import json
+import asyncio
+from abc import ABC, abstractmethod
 from functools import wraps
 from typing import Any, Callable, Awaitable, Self, Generator
 from dataclasses import dataclass, asdict
 from uuid import uuid4, UUID
 from collections import UserString
+from pathlib import Path
+from importlib import import_module
 
-from aiohttp import ClientSession
 from yarl import URL
 
 from hedgepy.common.utils import config
 
 
-App = ClientSession | Any
-AppConstructor = Callable[["Context"], App]
-AppRunner = Callable[[App], Awaitable]
+AppConstructor = Callable[["Context"], "App"]
+AppRunner = Callable[["App"], Awaitable]
 CorrID = str | int | UUID
-CorrIDFn = Callable[[App], CorrID]
-Getter = Callable[[App, "RequestParams", "Context"], Awaitable["Response"]]
+CorrIDFn = Callable[["App"], CorrID]
+Getter = Callable[["App", "RequestParams", "Context"], Awaitable["Response"]]
 Getters = dict[str, Getter]
 Formatter = Callable[["Response"], "Response"]
 Field = tuple[str, type]
@@ -165,12 +167,19 @@ class HTTPSessionSpec:
         _url = URL.build(scheme=self.scheme, host=self.host, port=self.port)
         return _url if _url != URL("") else None  # hack required for yarl <> aiohttp compatibility
     
-    def __call__(self, context: Context) -> ClientSession:
-        return ClientSession(
-            base_url=self.url(),
-            headers=self.headers, 
-            cookies=self.cookies
-        )
+
+class App(ABC):
+    @abstractmethod
+    def start(self): 
+        ...
+        
+    @abstractmethod
+    def stop(self):
+        ...
+        
+    @abstractmethod
+    def get(self, *args, **kwargs) -> Awaitable[Response]:
+        ...
 
 
 @dataclass
@@ -188,7 +197,7 @@ class VendorSpec:
 class Vendor:
     def __init__(
         self,
-        app: Any,
+        app: App,
         context: Context,
         getters: Getters,
         runner: AppRunner | None = None,
@@ -198,7 +207,7 @@ class Vendor:
         self.context = context
         self.gettters = getters
         self.runner = runner
-        self.corr_id_fn = corr_id_fn if corr_id_fn else lambda _: uuid4()
+        self.corr_id_fn = corr_id_fn if corr_id_fn else uuid4
 
     @classmethod
     def from_spec(cls, spec: VendorSpec) -> Self:
@@ -219,3 +228,33 @@ class Vendor:
         
     def response(self, request: Request, data: Any) -> Response:
         return Response.from_request(request, data)
+
+
+class Vendors:
+    def __init__(self, root: str):
+        self._vendors = self.load_vendors(root)
+    
+    @staticmethod
+    def load_vendors(root: str):
+        vendors = {}
+        for vendor in (Path(root) / 'common' / 'vendors').iterdir():
+            mod = import_module(f"hedgepy.common.vendors.{vendor.stem}")
+            vendors[vendor.stem] = Vendor.from_spec(mod.spec)
+        return vendors
+
+    async def stop_vendors(self):
+        for vendor in self._vendors.values():
+            if hasattr(vendor, "stop"):  # ClientSession does not have a stop method
+                if asyncio.iscoroutine(vendor.stop):
+                    await vendor.stop()
+                else:
+                    vendor.stop()
+
+    def start_vendors(self) -> tuple[Awaitable]:
+        tasks = filter(lambda coro_or_none: coro_or_none is not None,
+                       map(lambda vendor: vendor.start(), 
+                           filter(lambda vendor: hasattr(vendor, "start"), self._vendors.values())  # ClientSession does
+                           )                                                                        # not have a start
+                       )                                                                            # method
+        return tuple(tasks)  # to be awaited via asyncio.gather(*tasks)
+    
