@@ -7,7 +7,7 @@ context = API.Context(
         "key": API.EnvironmentVariable("api.fred.key"),
         "file_type": "json"
     },
-    derived_vars={"params": lambda self: {"api_key": self.key.value, "file_type": self.file_type}}
+    derived_vars={"http_params": lambda self: {"api_key": self.key.value, "file_type": self.file_type}}
 )
 
 

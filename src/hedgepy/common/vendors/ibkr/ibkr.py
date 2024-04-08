@@ -118,7 +118,7 @@ def get_account_summary(app: App, params: API.RequestParams, context: API.Contex
     request_id = app.client.get_request_id()
     app.client.reqAccountSummary(
         reqId=request_id, group="All", tags=AccountSummaryTags.AllTags)
-    return API.Response(corr_id=request_id)
+    return API.Response(request=request_id)
 
 
 @API.register_getter(
@@ -136,7 +136,7 @@ def get_realtime_bars(app: App, params: API.RequestParams, context: API.Context)
     contract = Contract(symbol=params.symbol)
     app.client.reqRealTimeBars(
         reqId=request_id, contract=contract, barSize=5, whatToShow="MIDPOINT", useRTH=False)  
-    return API.Response(corr_id=request_id)
+    return API.Response(request=request_id)
 
 
 @API.register_getter(
@@ -163,7 +163,7 @@ def get_historical_bars(app: App, params: API.RequestParams, context: API.Contex
         formatDate=1, 
         keepUpToDate=False, 
         chartOptions=[])  
-    return API.Response(corr_id=request_id)
+    return API.Response(request=request_id)
 
 
 @API.register_getter(
@@ -182,7 +182,7 @@ def get_historical_ticks(app: App, params: API.RequestParams, context: API.Conte
         useRth=0, 
         ignoreSize=False, 
         miscOptions=[])
-    return API.Response(corr_id=request_id)
+    return API.Response(request=request_id)
 
 
 @API.register_getter(
@@ -199,7 +199,7 @@ def get_realtime_ticks(app: App, symbol: str) -> API.Response:
         snapshot=False, 
         regulatorySnapshot=False, 
         mktDataOptions=[])
-    return API.Response(corr_id=request_id)
+    return API.Response(request=request_id)
 
 
 @API.register_getter(
@@ -210,7 +210,7 @@ def get_contract_details(app: App, symbol: str) -> API.Response:
     request_id = app.client.get_request_id()
     contract = Contract(symbol=symbol)
     app.client.reqContractDetails(reqId=request_id, contract=contract)
-    return API.Response(corr_id=request_id)
+    return API.Response(request=request_id)
 
 
 def construct_app(context: API.Context) -> App:

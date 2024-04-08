@@ -13,7 +13,7 @@ def format_tickers(response: API.Response) -> API.Response:
     formatted_data = tuple()
     for record in response.data.values():
         formatted_data += ((_sanitize_cik(record["cik_str"]), record["ticker"]),)
-    return API.Response(data=formatted_data, corr_id=response.corr_id)
+    return API.Response(data=formatted_data, request=response.request)
 
 
 @API.register_getter(formatter=format_tickers, returns=(("cik", str), ("ticker", str)))
@@ -39,7 +39,7 @@ def format_submissions(response: API.Response) -> API.Response:
                 bool(raw_data["isXBRL"][ix]),
             ),
         )
-    return API.Response(data=formatted_data, corr_id=response.corr_id)
+    return API.Response(data=formatted_data, request=response.request)
 
 
 @API.register_getter(
@@ -77,7 +77,7 @@ def format_concept(response: API.Response) -> API.Response:
                 ),
             )
 
-    return API.Response(data=formatted_data, corr_id=response.corr_id)
+    return API.Response(data=formatted_data, request=response.request)
 
 
 @API.register_getter(
@@ -124,7 +124,7 @@ def format_facts(response: API.Response):
                             record["filed"],
                         ),
                     )
-    return API.Response(data=formatted_data, corr_id=response.corr_id)
+    return API.Response(data=formatted_data, request=response.request)
 
 
 @API.register_getter(
@@ -170,7 +170,7 @@ def format_frame(response: API.Response) -> API.Response:
                 record["val"],
             ),
         )
-    return API.Response(data=formatted_data, corr_id=response.corr_id)
+    return API.Response(data=formatted_data, request=response.request)
 
 
 def _last_period():

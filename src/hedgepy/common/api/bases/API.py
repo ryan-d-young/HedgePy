@@ -84,8 +84,13 @@ class RequestParams:
     
     def chunk(self) -> Generator["RequestParams", None, None]:
         if isinstance(self.symbol, tuple):
-            return (RequestParams(
-                start=self.start, end=self.end, resolution=self.resolution, symbol=symbol) for symbol in self.symbol)
+            return (
+                RequestParams(
+                    start=self.start, 
+                    end=self.end, 
+                    resolution=self.resolution, 
+                    symbol=symbol
+                    ) for symbol in self.symbol)
         else:
             return (self,)
 
@@ -99,32 +104,29 @@ class Request:
         params: RequestParams,
         corr_id: CorrID | None = None,
     ):
-        self.params: dict = params.kwargs
         self.vendor = vendor
         self.endpoint = endpoint
-        self.corr_id = corr_id if corr_id else uuid4()
         self.context = context
+        self.params = params
+        self.corr_id = corr_id if corr_id else uuid4()
 
-    def prepare(self):
+    @property
+    def js(self):
         return {
             "params": self.params,
             "vendor": self.vendor,
             "endpoint": self.endpoint,
-            "corr_id": str(self.corr_id) if isinstance(self.corr_id, UUID) else self.corr_id
-        }
+            "corr_id": self.corr_id
+            }
 
     def encode(self) -> str:
-        return json.dumps(self.prepare())
+        return json.dumps(self.js())
 
 
 @dataclass
 class Response:
-    corr_id: CorrID
+    request: Request
     data: tuple[tuple[Any]] | None = None
-
-    @classmethod
-    def from_request(cls, request: Request, data: Any) -> Self:
-        return cls(corr_id=request.corr_id, data=data)
 
 
 def register_getter(returns: Fields, streams: bool = False, formatter: Formatter | None = None) -> Getter:
@@ -132,8 +134,9 @@ def register_getter(returns: Fields, streams: bool = False, formatter: Formatter
     Decorator function to register an API endpoint.
 
     Args:
-        returns (tuple[tuple[str, type]]): A tuple of field names and their corresponding types.
-        streams (bool, optional): Indicates if the endpoint streams. Defaults to False.
+        returns (Fields): Field names and their corresponding types.
+        streams (bool): Indicates if the endpoint streams. Defaults to False.
+        formatter (Formatter, optional): A function to format the response. Defaults to None.
 
     Returns:
         Getter: The decorated function.

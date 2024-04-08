@@ -26,8 +26,8 @@ def request(
 async def get(ctx_mgr: aiohttp.client._RequestContextManager, corr_id: API.CorrID) -> API.Response:
     async with ctx_mgr as response:
         data: Any = await response.json()
-        return API.Response(corr_id=corr_id, data=data)
+        return API.Response(request=corr_id, data=data)
 
 
 def format(response: API.Response, data: Data.Tbl) -> API.Response:
-    return API.Response(corr_id=response.corr_id, data=data)
+    return API.Response(request=response.request, data=data)

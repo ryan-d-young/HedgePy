@@ -6,7 +6,7 @@ from functools import partial
 
 def format(response: API.Response, index: str) -> API.Response:
     return API.Response(
-        corr_id=response.corr_id,
+        request=response.request,
         data=tuple(tuple(record.values()) for record in response.data[index]),
     )
 
