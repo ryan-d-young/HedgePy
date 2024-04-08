@@ -26,7 +26,7 @@ from ibapi.contract import ContractDetails
 from ibapi.server_versions import MIN_CLIENT_VER, MAX_CLIENT_VER
 from ibapi.message import OUT
 
-from hedgepy.common.api.bases import API
+from hedgepy.common.bases import API
 
 
 class Connection: 

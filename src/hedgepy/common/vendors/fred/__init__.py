@@ -1,4 +1,4 @@
-from hedgepy.common.api.bases import API
+from hedgepy.common.bases import API
 from hedgepy.common.vendors.fred import fred
   
   

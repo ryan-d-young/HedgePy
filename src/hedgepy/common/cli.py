@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 from aiohttp import ClientSession
 
-from hedgepy.common.api.bases import API
+from hedgepy.common.bases import API
 
 
 parser = argparse.ArgumentParser(prog="HedgePy", description="HedgePy CLI")

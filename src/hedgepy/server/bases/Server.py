@@ -4,7 +4,7 @@ from uuid import UUID
 from collections import UserDict
 from abc import ABC, abstractmethod
 
-from hedgepy.common.api.bases import API
+from hedgepy.common.bases import API
 from hedgepy.common.utils import config
 
 

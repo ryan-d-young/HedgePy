@@ -5,7 +5,7 @@ from ibapi.common import BarData, HistoricalTick, ListOfHistoricalTick, TagValue
 from ibapi.contract import Contract, ContractDetails
 from ibapi.account_summary_tags import AccountSummaryTags
 
-from hedgepy.common.api.bases import API
+from hedgepy.common.bases import API
 from hedgepy.common.vendors.ibkr.bases import Client, App
 
 

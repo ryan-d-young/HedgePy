@@ -1,4 +1,4 @@
-from hedgepy.common.api.bases import API
+from hedgepy.common.bases import API
 from hedgepy.common.vendors.ibkr.ibkr import (
     construct_app, run_app, corr_id, get_account_summary, get_contract_details, 
     get_historical_bars, get_historical_ticks, get_realtime_ticks, get_realtime_bars)
