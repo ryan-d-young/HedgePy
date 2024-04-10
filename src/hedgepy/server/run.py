@@ -6,8 +6,7 @@ async def main():
     server, db, daemon, schedule = await init.init()
     daemon.set_schedule(schedule.items)
     
-    await server.start()
-#    await asyncio.gather(server.run(), daemon.start(), *tasks)
+    await asyncio.gather(server.start(), daemon.start())
     
 if __name__ == '__main__':
     asyncio.run(main(), debug=True)

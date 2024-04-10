@@ -5,7 +5,7 @@ from datetime import timedelta
 from hedgepy.common.bases import Template
 from hedgepy.common.bases import API
 from hedgepy.common.bases.Data import cast
-from hedgepy.server.bases.Agent import ScheduleItem, Schedule
+from hedgepy.server.bases.Schedule import ScheduleItem, Schedule
 
 
 def generate_schedule(requests: tuple[API.RequestParams], first_cycle: timedelta, last_cycle: timedelta) -> Schedule:

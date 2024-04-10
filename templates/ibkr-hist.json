@@ -1,13 +1,14 @@
 {
+    "$schema": "_schema.json",
     "common": {
         "vendor": "ibkr",
-        "endpoint": "get_historical_data",
-        "start": "1990-01-01",
+        "endpoint": "historical_bars",
+        "start": "1990-01-01T00:00:00",
         "resolution": "PT1H"
     },
     "templates": [
-        {"symbol": ["NDQ"]}, 
-        {"symbol": ["SPX"]}, 
-        {"symbol": ["DJI"]}
+        {"symbol": "NDQ"}, 
+        {"symbol": "SPX"}, 
+        {"symbol": "DJI"}
     ]
 }

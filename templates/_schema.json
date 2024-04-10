@@ -1,7 +1,7 @@
 {
     "definitions": {
         "string": {"type": "string"},
-        "date": {"format": "date", "type": "string"},
+        "date": {"format": "datetime", "type": "string"},
         "duration": {"format": "duration", "type": "string"},
         "string_array": {"type": "array", "items": {"type": "string"}},
         "orientation": {"type": "string", "enum": ["wide", "long"], "default": "wide"},
@@ -14,7 +14,7 @@
                 "end": {"$ref": "#/definitions/date"},
                 "resolution": {"$ref": "#/definitions/duration"},
                 "orientation": {"$ref": "#/definitions/orientation"},
-                "symbol": {"$ref": "#/definitions/string_array"},
+                "symbol": {"$ref": "#/definitions/string"},
                 "field": {"$ref": "#/definitions/string_array"}
             }
         }, 

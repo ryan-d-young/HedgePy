@@ -1,11 +1,12 @@
 import asyncio
-from aiohttp import web
+from aiohttp import web, ClientResponse
 from uuid import UUID
 from collections import UserDict
 from abc import ABC, abstractmethod
+from time import time
 
 from hedgepy.common.bases import API
-from hedgepy.common.utils import config
+from hedgepy.common.utils import config, dtwrapper
 
 
 class ResponseManager(UserDict):
@@ -16,10 +17,14 @@ class ResponseManager(UserDict):
     async def __getitem__(self, key: UUID) -> API.Response:
         async with self._lock:
             return super().__getitem__(key)
+
+    get = __getitem__
             
     async def __setitem__(self, key: UUID, value: API.Response) -> None:
         async with self._lock:
             super().__setitem__(key, value)      
+            
+    set = __setitem__
             
     async def pop(self, key: UUID) -> API.Response:
         async with self._lock:
@@ -28,7 +33,7 @@ class ResponseManager(UserDict):
 
 class LogicMixin(ABC):
     CYCLE_MS = 50
-    LONG_CYCLE_MS = 1e3
+    LONG_CYCLE_MS = 1e3 - CYCLE_MS
 
     def _cleanup(self):
         self._running: bool = False
@@ -46,7 +51,7 @@ class LogicMixin(ABC):
     async def run(self):
         while self._running:
             try: 
-                print("Server cycle")
+                print("Server cycle", time())
                 await self.cycle() 
             except KeyboardInterrupt:
                 await self.stop_loop()
@@ -73,6 +78,7 @@ class BaseServer(LogicMixin, ABC):
     async def stop_server(self):
         await self._site.stop()
         await self._runner.cleanup()
+            
 
     @abstractmethod
     async def _handle_get(self, response: web.BaseRequest) -> web.Response:
@@ -102,7 +108,15 @@ class Server(BaseServer):
         self._vendors = API.Vendors()
         
     @property
-    def vendors(self):
+    def requests(self) -> asyncio.PriorityQueue:
+        return self._request_queue
+    
+    @property
+    def responses(self) -> ResponseManager:
+        return self._responses
+        
+    @property
+    def vendors(self) -> API.Vendors:
         return self._vendors.vendors
     
     async def start(self):
@@ -122,44 +136,43 @@ class Server(BaseServer):
     async def cycle(self):
         try: 
             request: API.Request = self._request_queue.get_nowait()
-    
-            if request: 
-                vendor = self.vendors[request.vendor]
-                fn = vendor[request.endpoint]
-                result = await fn(vendor.app, request.params, vendor.context)
-    
-                if hasattr(result, "json"):
-                    result = await result.json()                
+            vendor: API.Vendor = self.vendors[request.vendor]
+            fn: API.Getter = vendor[request.endpoint]
+            
+            request = request.prepare()
 
-                response = API.Response(request=request, data=result)
+            data = await fn(vendor.app, request, vendor.context)
+            if isinstance(data, ClientResponse):
+                data = await data.json()
 
-                if fn.formatter:
-                    response = fn.formatter(response)
+            response = API.Response(request=request, data=data)
 
-                self._responses[request.corr_id] = response
+            if fn.formatter:
+                response = fn.formatter(response)
+
+            await self.responses.set(key=request.corr_id, value=response)
     
         except asyncio.QueueEmpty:
             await asyncio.sleep(LogicMixin.LONG_CYCLE_MS / 1e3)
         except Exception as e:
             raise e  # TODO: error handling
     
-    async def _handle_get(self, response: web.BaseRequest) -> web.Response:
-        response_js = await response.json()
-        if response_js['corr_id'] in self._responses:
-            response = await self._responses.pop(response_js['corr_id'])
-            return web.json_response(response.data)
+    async def _handle_get(self, request: web.BaseRequest) -> web.Response:
+        request_js = await request.json()
+        
+        if request_js['corr_id'] in self.responses:
+            response = await self.responses.pop(request_js['corr_id'])
+            return web.json_response(response.to_js())
         else:
             return web.Response(status=404)
 
     async def _handle_post(self, request: web.BaseRequest) -> web.Response:
         request_js = await request.json()
+        vendor = self.vendors[request_js['vendor']]
+        corr_id = vendor.corr_id_fn(vendor.app)        
         
-        if corr_id_fn := self.vendors[request_js['vendor']].corr_id_fn:
-            corr_id = corr_id_fn()
-        else:
-            corr_id = None
+        request_obj = API.Request.from_js(request_js, corr_id)
+        await self.requests.put(request_obj)
         
-        request_obj = API.Request(**request_js, corr_id=corr_id)
-        await self._request_queue.put(request_obj)
-        return web.json_response({'corr_id': request_obj.corr_id})
+        return web.json_response({'corr_id': corr_id})
     

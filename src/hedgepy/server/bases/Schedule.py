@@ -2,14 +2,13 @@ import datetime
 import asyncio
 from dataclasses import dataclass
 from uuid import UUID
-from aiohttp import ClientSession
 
-from hedgepy.common.bases import API
+from hedgepy.common.bases import API, Consumer
 
 
 @dataclass
 class ScheduleItem:
-    request: API.RequestParams
+    request: API.Request
     interval: int | None = None
 
 
@@ -25,22 +24,9 @@ class Schedule:
         return (self.stop - self.start) // self.interval
 
 
-class Consumer:
-    def __init__(self, env: dict):
-        self._url = f"http://{env['SERVER_HOST']}:{env['SERVER_PORT']}"
-        self._session = ClientSession()
+class Daemon(Consumer.BaseConsumer):
+    START_TIME_S = 5
     
-    async def post(self, request: API.RequestParams) -> UUID:
-        async with self._session.post(self._url, json=request.js) as response:
-            resp = await response.json()
-            return UUID(resp['corr_id'])
-        
-    async def get(self, corr_id: UUID) -> API.Response:
-        async with self._session.get(self._url, json={'corr_id': corr_id}) as response:
-            return await response.json()
-
-    
-class Daemon(Consumer):            
     def __init__(self, env: dict):
         super().__init__(env)
         self._running = False
@@ -58,6 +44,7 @@ class Daemon(Consumer):
         return corr_ids
         
     async def run(self):
+        await asyncio.sleep(Daemon.START_TIME_S)
         while self._running:
             print("Daemon cycle:", self._cycle)
             if self._cycle < self._schedule.cycles:

@@ -49,8 +49,9 @@ class ClientImpl(Client):
             )
 
 
-def resolve_duration(start: datetime, end: datetime) -> str:
+def resolve_duration(start: datetime, end: datetime | None) -> str:
     """https://ibkrcampus.com/ibkr-api-page/twsapi-doc/#hist-duration"""
+    end = end if end else datetime.now()
     s = int((end - start).total_seconds())
     if s < 60 * 60 * 24:
         return f"{s} S"
@@ -102,7 +103,7 @@ def reconcile_duration_bar_size(duration_str: str, bar_size_str: str) -> tuple[s
         "weeks": 60 * 60 * 24 * 7,
         "months": 60 * 60 * 24 * 30
     }
-    bar_size_seconds = bar_size_value * bar_size_unit_to_seconds[bar_size_unit]
+    bar_size_seconds = int(bar_size_value) * bar_size_unit_to_seconds[bar_size_unit]
     bar_size_seconds = min(max_bar_size_value, max(min_bar_size_value, bar_size_seconds))
     bar_size_str = resolve_bar_size(timedelta(seconds=bar_size_seconds))
     return duration_str, bar_size_str
@@ -146,14 +147,16 @@ def get_realtime_bars(app: App, params: API.RequestParams, context: API.Context)
             ("low", float),
             ("close", float),
             ("volume", int)))
-def get_historical_bars(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
-    request_id = app.client.get_request_id()
+def get_historical_bars(app: App, request: API.Request, context: API.Context) -> API.Response:
+    params = request.params
     duration_str, bar_size_str = reconcile_duration_bar_size(
         resolve_duration(params.start, params.end), resolve_bar_size(params.resolution))
-    end_datetime_str = params.end.strftime(context.DTFMT) if (params.end < datetime.today()) else ""
-    contract = Contract(symbol=params.symbol)
+    end_datetime_str = params.end.strftime(context.DTFMT) if params.end else ""
+    contract = Contract()
+    contract.symbol = params.symbol
+    contract.exchange = "SMART"
     app.client.reqHistoricalData(
-        reqId=request_id, 
+        reqId=request.corr_id, 
         contract=contract, 
         endDateTime=end_datetime_str, 
         durationStr=duration_str, 
@@ -163,7 +166,7 @@ def get_historical_bars(app: App, params: API.RequestParams, context: API.Contex
         formatDate=1, 
         keepUpToDate=False, 
         chartOptions=[])  
-    return API.Response(request=request_id)
+    return API.Response(request=request)
 
 
 @API.register_getter(

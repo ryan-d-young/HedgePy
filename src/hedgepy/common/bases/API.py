@@ -12,7 +12,7 @@ from importlib import import_module
 from yarl import URL
 from aiohttp import ClientSession
 
-from hedgepy.common.utils import config
+from hedgepy.common.utils import config, dtwrapper
 
 
 App = Any | ClientSession
@@ -20,7 +20,7 @@ AppConstructor = Callable[["Context"], "App"]
 AppRunner = Callable[["App"], Awaitable]
 CorrID = str | int | UUID
 CorrIDFn = Callable[["App"], CorrID]
-Getter = Callable[["App", "RequestParams", "Context"], Awaitable["Response"]]
+Getter = Callable[["App", "Request", "Context"], Awaitable["Response"]]
 Getters = dict[str, Getter]
 Formatter = Callable[["Response"], "Response"]
 Field = tuple[str, type]
@@ -67,38 +67,27 @@ class Context:
         raise AttributeError("Context is immutable")
 
 
-class Symbol(UserString):
-    def split(self) -> tuple[str]:
-        return super().split(":")
-
-
 @dataclass
 class RequestParams:
     start: str | None = None
     end: str | None = None
     resolution: str | None = None
-    symbol: tuple[Symbol] | Symbol | None = None
+    symbol: str | None = None
 
     def __post_init__(self):
         self._kwargs = {k: v for k, v in asdict(self).items() if v is not None}
-    
+        
     @property
     def kwargs(self) -> dict:
         return self._kwargs
     
-    def chunk(self) -> Generator["RequestParams", None, None]:
-        if isinstance(self.symbol, tuple):
-            return (
-                RequestParams(
-                    start=self.start, 
-                    end=self.end, 
-                    resolution=self.resolution, 
-                    symbol=symbol
-                    ) for symbol in self.symbol)
-        else:
-            return (self,)
+    def prepare(self) -> "RequestParams":
+        start, end = dtwrapper.format(self.start, self.end)
+        resolution = dtwrapper.str_to_td(self.resolution)
+        return RequestParams(start=start, end=end, resolution=resolution, symbol=self.symbol)
 
 
+@dataclass
 class Request:
     def __init__(
         self,
@@ -110,25 +99,48 @@ class Request:
         self.vendor = vendor
         self.endpoint = endpoint
         self.params = params
-        self.corr_id = corr_id if corr_id else uuid4()
+        self.corr_id = corr_id  # corr_id is only set server-side
 
-    @property
-    def js(self):
+    def to_js(self):
         return {
             "vendor": self.vendor,
             "endpoint": self.endpoint,
-            "params": self.params,
-            "corr_id": self.corr_id
-            }
+            "params": self.params.kwargs,
+            }  # to_js is only called client-side, so corr_id is not included
 
     def encode(self) -> str:
         return json.dumps(self.js())
+    
+    @classmethod
+    def from_js(cls, js: dict, corr_id: CorrID) -> Self:  # from_js is only called server-side
+        params = js.pop("params", {})
+        return cls(**js, corr_id=corr_id, params=RequestParams(**params))
+
+    def decode(self, data: str) -> Self:
+        return self.from_js(json.loads(data))
+    
+    def prepare(self) -> Self:
+        self.params = self.params.prepare()
+        return self
 
 
 @dataclass
 class Response:
     request: Request
     data: tuple[tuple[Any]] | None = None
+    
+    def to_js(self):
+        return {
+            "request": self.request.to_js(),
+            "data": self.data
+            }
+        
+    @classmethod
+    def from_js(cls, js: dict) -> Self:
+        request_js = js.pop("request")
+        corr_id = request_js.pop("corr_id")
+        request = Request.from_js(request_js, corr_id)
+        return cls(request=request, **js)
 
 
 def register_getter(returns: Fields, streams: bool = False, formatter: Formatter | None = None) -> Getter:

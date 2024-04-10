@@ -1,6 +1,6 @@
 import datetime
 
-from hedgepy.server.bases.Agent import Daemon, Schedule, ScheduleItem
+from hedgepy.server.bases.Schedule import Daemon, Schedule, ScheduleItem
 from hedgepy.server.bases.Database import Database
 
 

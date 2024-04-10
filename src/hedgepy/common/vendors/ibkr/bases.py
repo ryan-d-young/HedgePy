@@ -14,8 +14,7 @@ followed by calling App.start(). Requests made via App.put(request), and respons
 
 import asyncio
 from abc import ABC, abstractmethod
-from decimal import Decimal
-from typing import AsyncGenerator, Generator, Callable, Any
+from typing import AsyncGenerator, Generator, Any
 
 from ibapi import comm
 from ibapi.wrapper import EWrapper
@@ -207,6 +206,7 @@ class BaseClient(EWrapper, EClient):
             msg: bytes = self.conn.read()
             fields: tuple[Any] = comm.read_fields(msg)
             self.decoder.interpret(fields)
+            await self._response_queue.put(fields)
 
 
 class Client(BaseClient, ABC):
@@ -493,13 +493,13 @@ class App:
         except asyncio.QueueEmpty:
             await asyncio.sleep(0)
         else:
-            request_id, *fields = response.popitem()
-            async with self._lock:
-                try: 
-                    self.responses[request_id] += ((fields),)
-                except KeyError:
-                    self.responses[request_id]  = ((fields),)
-            print(fields)
+            if isinstance(response, tuple) and len(response) > 1:
+                request_id, *fields = response
+                async with self._lock:
+                    try: 
+                        self.responses[request_id] += ((fields),)
+                    except KeyError:
+                        self.responses[request_id]  = ((fields),)
 
     async def get(self, request_id: int) -> API.Response | None | object:
         async with self._lock:
@@ -511,7 +511,6 @@ class App:
         while self._running:
             try: 
                 await self._cycle()
-                print("App cycle")
             except KeyboardInterrupt:
                 await self.stop()
             finally: 

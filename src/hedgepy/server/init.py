@@ -1,7 +1,7 @@
 import getpass
 from datetime import timedelta
 from hedgepy.server.routines import dbinit, parse, process
-from hedgepy.server.bases import Server, Database, Agent
+from hedgepy.server.bases import Schedule, Server, Database
 
 
 
@@ -15,11 +15,11 @@ def make_daemon(
     start: tuple[int, int, int], 
     stop: tuple[int, int, int], 
     interval: int
-    ) -> Agent.Daemon:
+    ) -> Schedule.Daemon:
     start_td = timedelta(hours=start[0], minutes=start[1], seconds=start[2])
     stop_td = timedelta(hours=stop[0], minutes=stop[1], seconds=stop[2])
     interval_td = timedelta(seconds=interval)    
-    return Agent.Daemon(
+    return Schedule.Daemon(
         env={'SERVER_HOST': host,
              'SERVER_PORT': port, 
              'DAEMON_START': start_td,
@@ -38,7 +38,7 @@ def make_database(dbname: str, host: str, port: int, user: str, password: str) -
         )
 
 
-async def init() -> tuple[Server.Server, Database.Database, Agent.Daemon, Agent.Schedule]:
+async def init() -> tuple[Server.Server, Database.Database, Schedule.Daemon, Schedule.Schedule]:
     from hedgepy.common.utils import config
     
     server = make_server()
