@@ -3,7 +3,7 @@ from uuid import UUID
 from time import time
 from typing import AsyncGenerator
 
-from aiohttp import ClientSession, web
+from aiohttp import ClientSession, web, ContentTypeError
 
 from hedgepy.common.bases import API
 
@@ -16,8 +16,12 @@ class BaseConsumer:
     
     async def post(self, request: API.Request) -> UUID:
         async with self._session.post(self._url, json=request.to_js()) as response:
-            resp = await response.json()
-            return resp['corr_id']
+            try: 
+                resp = await response.json()
+                return resp['corr_id']
+            except ContentTypeError:
+                await asyncio.sleep(1)
+                await self.post(request)
         
     async def get(self, corr_id: API.CorrID) -> API.Response | None:
         async with self._session.get(self._url, json={'corr_id': corr_id}) as response:

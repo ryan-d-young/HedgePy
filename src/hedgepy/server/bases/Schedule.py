@@ -51,7 +51,7 @@ class Daemon(Consumer.BaseConsumer):
                 await self.consume()
             else: 
                 await self.stop()
-            await asyncio.sleep(self._schedule.INTERVAL.total_seconds())
+            await asyncio.sleep(self._schedule.interval.total_seconds())
             
     async def start(self):
         self._running = True

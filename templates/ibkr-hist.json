@@ -7,8 +7,8 @@
         "resolution": "PT1H"
     },
     "templates": [
-        {"symbol": "NDQ"}, 
-        {"symbol": "SPX"}, 
-        {"symbol": "DJI"}
+        {"symbol": "IND.NDQ.USD.SMART"}, 
+        {"symbol": "IND.SPX.USD.SMART"}, 
+        {"symbol": "IND.DJI.USD.SMART"}
     ]
 }

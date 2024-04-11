@@ -4,9 +4,13 @@ from uuid import UUID
 from collections import UserDict
 from abc import ABC, abstractmethod
 from time import time
+from typing import Awaitable
 
 from hedgepy.common.bases import API
-from hedgepy.common.utils import config, dtwrapper
+from hedgepy.common.utils import config, dtwrapper, logger
+
+
+LOGGER = logger.get_logger(__name__)
 
 
 class ResponseManager(UserDict):
@@ -120,6 +124,7 @@ class Server(BaseServer):
         return self._vendors.vendors
     
     async def start(self):
+        LOGGER.info("Starting server")
         await asyncio.gather(
             *self._vendors.start_vendors(), 
             self.start_server(), 
@@ -127,6 +132,7 @@ class Server(BaseServer):
             )
         
     async def stop(self):
+        LOGGER.info("Stopping server")
         await asyncio.gather(
             self._vendors.stop_vendors(), 
             self.stop_server(), 
@@ -140,12 +146,12 @@ class Server(BaseServer):
             fn: API.Getter = vendor[request.endpoint]
             
             request = request.prepare()
+            LOGGER.debug(f"Processing request {request}")
+            
+            response = fn(vendor.app, request, vendor.context)
 
-            data = await fn(vendor.app, request, vendor.context)
-            if isinstance(data, ClientResponse):
-                data = await data.json()
-
-            response = API.Response(request=request, data=data)
+            if isinstance(response, Awaitable):
+                response = await response
 
             if fn.formatter:
                 response = fn.formatter(response)
@@ -155,9 +161,11 @@ class Server(BaseServer):
         except asyncio.QueueEmpty:
             await asyncio.sleep(LogicMixin.LONG_CYCLE_MS / 1e3)
         except Exception as e:
+            LOGGER.error(f"Error processing request: {e}")
             raise e  # TODO: error handling
     
     async def _handle_get(self, request: web.BaseRequest) -> web.Response:
+        LOGGER.debug(f"Received GET request {request}")
         request_js = await request.json()
         
         if request_js['corr_id'] in self.responses:
@@ -167,6 +175,7 @@ class Server(BaseServer):
             return web.Response(status=404)
 
     async def _handle_post(self, request: web.BaseRequest) -> web.Response:
+        LOGGER.debug(f"Received POST request {request}")
         request_js = await request.json()
         vendor = self.vendors[request_js['vendor']]
         corr_id = vendor.corr_id_fn(vendor.app)        

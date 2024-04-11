@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timedelta
 
 from ibapi.common import BarData, HistoricalTick, ListOfHistoricalTick, TagValueList, TickAttrib, TickerId
-from ibapi.contract import Contract, ContractDetails
+from ibapi.contract import Contract as Contract_, ContractDetails
 from ibapi.account_summary_tags import AccountSummaryTags
 
 from hedgepy.common.bases import API
@@ -10,6 +10,52 @@ from hedgepy.common.vendors.ibkr.bases import Client, App
 
 
 IBKRResponse = dict[TickerId, tuple]
+
+
+class Contract(Contract_):
+    @classmethod
+    def from_symbol(cls, symbol: str) -> "Contract":
+        def underlying(sec_type: str, symbol: str, currency: str = "USD", exchange: str = "SMART"):
+            contract = cls()
+            contract.secType = sec_type
+            contract.symbol = symbol
+            contract.exchange = exchange
+            contract.currency = currency
+            return contract
+        
+        def linear(sec_type: str, symbol: str, currency: str = "USD", exchange: str = "CME", expiry: str = None):
+            contract = cls()
+            contract.symbol = symbol
+            contract.exchange = exchange
+            contract.currency = currency
+            if sec_type == "FUT" and expiry is not None: 
+                contract.secType = sec_type
+                contract.lastTradeDateOrContractMonth = expiry
+            else:
+                contract.secType = "CONTFUT"
+            return contract
+        
+        def nonlinear(sec_type: str, symbol: str, currency: str = "USD", exchange: str = "SMART", expiry: str = None, 
+                      strike: float = None, right: str = "C", multiplier: int = 1):
+            contract = cls()
+            contract.secType = sec_type
+            contract.symbol = symbol
+            contract.exchange = exchange
+            contract.currency = currency
+            contract.lastTradeDateOrContractMonth = expiry
+            contract.strike = strike
+            contract.right = right
+            contract.multiplier = multiplier
+            return contract
+        
+        sec_type, *other = symbol.split(".")
+        match sec_type:
+            case "STK" | "BOND" | "CMDTY" | "CRYPTO" | "CASH" | "IND" | "CFD":
+                return underlying(sec_type, *other)
+            case "FUT":
+                return linear(sec_type=sec_type, *other)
+            case "OPT" | "FOPT":
+                return nonlinear(sec_type=sec_type, *other) 
 
 
 class ClientImpl(Client):
@@ -134,7 +180,7 @@ def get_account_summary(app: App, params: API.RequestParams, context: API.Contex
     streams=True)
 def get_realtime_bars(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
     request_id = app.client.get_request_id()
-    contract = Contract(symbol=params.symbol)
+    contract = Contract.from_symbol(params.symbol)
     app.client.reqRealTimeBars(
         reqId=request_id, contract=contract, barSize=5, whatToShow="MIDPOINT", useRTH=False)  
     return API.Response(request=request_id)
@@ -152,9 +198,7 @@ def get_historical_bars(app: App, request: API.Request, context: API.Context) ->
     duration_str, bar_size_str = reconcile_duration_bar_size(
         resolve_duration(params.start, params.end), resolve_bar_size(params.resolution))
     end_datetime_str = params.end.strftime(context.DTFMT) if params.end else ""
-    contract = Contract()
-    contract.symbol = params.symbol
-    contract.exchange = "SMART"
+    contract = Contract.from_symbol(params.symbol)
     app.client.reqHistoricalData(
         reqId=request.corr_id, 
         contract=contract, 
@@ -175,7 +219,7 @@ def get_historical_bars(app: App, request: API.Request, context: API.Context) ->
             ("size", float)),)
 def get_historical_ticks(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
     request_id = app.client.get_request_id()
-    contract = Contract(symbol=params.symbol)
+    contract = Contract.from_symbol(params.symbol)
     app.client.reqHistoricalTicks(
         reqId=request_id, 
         contract=contract, 
@@ -192,9 +236,9 @@ def get_historical_ticks(app: App, params: API.RequestParams, context: API.Conte
     returns=(("tick_type", int),
             ("price", float)),
     streams=True)
-def get_realtime_ticks(app: App, symbol: str) -> API.Response:
+def get_realtime_ticks(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
     request_id = app.client.get_request_id()
-    contract = Contract(symbol=symbol)
+    contract = Contract.from_symbol(params.symbol)
     app.client.reqMktData(
         reqId=request_id, 
         contract=contract, 
@@ -209,9 +253,9 @@ def get_realtime_ticks(app: App, symbol: str) -> API.Response:
     returns=(("label", str),
             ("value", str))
 )
-def get_contract_details(app: App, symbol: str) -> API.Response:
+def get_contract_details(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
     request_id = app.client.get_request_id()
-    contract = Contract(symbol=symbol)
+    contract = Contract.from_symbol(params.symbol)
     app.client.reqContractDetails(reqId=request_id, contract=contract)
     return API.Response(request=request_id)
 

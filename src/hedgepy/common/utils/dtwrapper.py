@@ -39,8 +39,7 @@ def time_to_td(t: str) -> datetime.timedelta:
 def _str_to_td(match: re.Match):
     args = ("year", "month", "week", "day", "hour", "minute", "second")
     args_dict = dict(zip(args, tuple(map(lambda s: int(match.group(f"{s}s") or 0) + 1, args))))
-    weeks = args_dict.pop("week") or 0
-    args_dict["day"] += 7 * weeks
+    args_dict["day"] += 7 * args_dict.pop("week")
     return datetime.datetime(**args_dict) - datetime.datetime(1, 1, 8, 1, 1, 1)
 
 

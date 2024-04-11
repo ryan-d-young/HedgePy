@@ -24,3 +24,6 @@ email = "$EDGAR_EMAIL"
 
 [api.fred]
 key = "$FRED_KEY"
+
+[api.figi]
+key = "$FIGI_KEY"
