@@ -5,14 +5,17 @@ from functools import wraps
 from typing import Any, Callable, Awaitable, Self, Generator
 from dataclasses import dataclass, asdict
 from uuid import uuid4, UUID
-from collections import UserString
+from collections import UserString, deque
 from pathlib import Path
 from importlib import import_module
 
 from yarl import URL
 from aiohttp import ClientSession
 
-from hedgepy.common.utils import config, dtwrapper
+from hedgepy.common.utils import config, dtwrapper, logger
+
+
+LOGGER = logger.get(__name__)
 
 
 App = Any | ClientSession
@@ -20,8 +23,8 @@ AppConstructor = Callable[["Context"], "App"]
 AppRunner = Callable[["App"], Awaitable]
 CorrID = str | int | UUID
 CorrIDFn = Callable[["App"], CorrID]
-Getter = Callable[["App", "Request", "Context"], Awaitable["Response"]]
-Getters = dict[str, Getter]
+Target = Callable[["App", "Request", "Context"], Awaitable["Response"]]
+Getters = dict[str, Target | "RateLimitedGetter"]
 Formatter = Callable[["Response"], "Response"]
 Field = tuple[str, type]
 Fields = tuple[Field]
@@ -143,7 +146,7 @@ class Response:
         return cls(request=request, **js)
 
 
-def register_getter(returns: Fields, streams: bool = False, formatter: Formatter | None = None) -> Getter:
+def register_getter(returns: Fields, streams: bool = False, formatter: Formatter | None = None) -> Target:
     """
     Decorator function to register an API endpoint.
 
@@ -156,7 +159,7 @@ def register_getter(returns: Fields, streams: bool = False, formatter: Formatter
         Getter: The decorated function.
 
     """
-    def decorator(getter: Getter) -> Getter:
+    def decorator(getter: Target) -> Target:
         @wraps(getter)
         def wrapper(app: Any, params: RequestParams, *args, **kwargs) -> Awaitable[Response]:
             return getter(app, params, *args, **kwargs)
@@ -194,13 +197,93 @@ class App(ABC):
         ...
 
 
+class Getter:
+    def __init__(self, target: Target):
+        self.target = target
+        self._lock = asyncio.Lock()
+        
+    async def __call__(self, app: App, request: Request, context: Context, **kwargs) -> Awaitable[Response]:
+        async with self._lock:
+            return self.target(app, request, context, **kwargs)
+
+
+class RateLimiter(Getter):
+    def __init__(self, target: Target, max_requests: int, interval: str):
+        super().__init__(target)
+        self.interval = dtwrapper.str_to_td(interval).total_seconds()
+        self.history = deque(maxlen=max_requests)
+
+    async def __call__(self, app: App, request: Request, context: Context) -> Response:
+        time = dtwrapper.t_now()
+        
+        try:
+            elapsed = time - self.history.popleft()
+        except IndexError:  # history is empty
+            elapsed = self.interval
+        finally:
+            if elapsed < self.interval:
+                sleep_time, vendor, endpoint = self.interval - elapsed, request.vendor, request.endpoint
+                LOGGER.info(f"Rate limit exceeded for {vendor} {endpoint}, waiting {sleep_time}s")
+                await asyncio.sleep(sleep_time)
+            response = await self.target.__call__(app, request, context)
+            self.history.append(time)
+
+        return response
+
+
+class TimeChunker(Getter):
+    def __init__(self, target: Target, chunk_schedule: dict[str, str]):  # dict[resolution, max_duration]
+        super().__init__(target)
+        self.chunk_schedule = dict(zip(
+            map(dtwrapper.str_to_td, chunk_schedule.keys()), 
+            map(dtwrapper.str_to_td, chunk_schedule.values())))
+        
+    async def _chunk(self, app: App, request: Request, context: Context, 
+                     n_chunks: int, max_duration: dtwrapper.datetime.timedelta) -> Response:
+        corr_id, request_start = request.corr_id, dtwrapper.str_to_dt(request.params.start)
+        responses = {}
+        
+        for _ in range(n_chunks - 1):
+            request = Request(
+                corr_id=corr_id,
+                vendor=request.vendor, 
+                endpoint=request.endpoint,
+                params=RequestParams(
+                    start=request_start, 
+                    end=request_start + max_duration, 
+                    resolution=request.params.resolution, 
+                    symbol=request.params.symbol)
+                )
+            
+            responses[request.corr_id] = await self.target.__call__(app, request, context)
+            request_start = request.params.end + request.params.resolution
+            corr_id = request.corr_id_fn(app)
+            
+        return responses
+         
+    async def __call__(self, app: App, request: Request, context: Context) -> Response:
+        request_resolution = request.params.resolution
+        request_end = request.params.end if request.params.end else dtwrapper.t_now()
+        request_duration = request_end - dtwrapper.str_to_dt(request.params.start)
+
+        for resolution, max_duration in self.chunk_schedule.items():
+            if request_resolution <= resolution:
+                n_chunks = request_duration // max_duration
+                if n_chunks > 1:
+                    LOGGER.info(f"Chunking {request.vendor} {request.endpoint} into {n_chunks} chunks")
+                    response = await self._chunk(app, request, context, n_chunks)
+                else:
+                    response = await self.target.__call__(app, request, context)
+        return response
+           
+
 @dataclass
 class VendorSpec:
-    getters: dict[str, Getter]
-    app_constructor: Callable[[Context], App] | HTTPSessionSpec | None = None
-    app_runner: Callable[[App], Awaitable] | None = None
+    getters: Getters
+    app_constructor: AppConstructor | None = None
+    app_runner: AppRunner | None = None
     context: Context | None = None
-    corr_id_fn: Callable[[App], CorrID] | None = None
+    corr_id_fn: CorrIDFn | None = None
 
     def __post_init__(self):
         self.name = self.__module__.split(".")[-2]
@@ -221,7 +304,7 @@ class Vendor:
         self.runner = runner
         self.corr_id_fn = corr_id_fn if corr_id_fn else uuid4
         
-    def __getitem__(self, endpoint: str) -> Getter:
+    def __getitem__(self, endpoint: str) -> Target:
         return self.getters[endpoint]
 
     @classmethod

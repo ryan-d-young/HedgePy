@@ -1,5 +1,4 @@
 import re
-import math
 import datetime
 import time
 import calendar
@@ -60,3 +59,10 @@ def dt_to_str(dt: datetime.datetime | None, fmt: str = DTFMT) -> str:
 def format(start: str | None, end: str | None) -> tuple[datetime.datetime, datetime.datetime]:
     return str_to_dt(start), str_to_dt(end)
     
+    
+def t_now() -> time.time:
+    return time.time()
+
+
+def dt_now() -> datetime.date:
+    return datetime.datetime.now()

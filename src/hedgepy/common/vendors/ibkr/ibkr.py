@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta
+from typing import Awaitable
 
 from ibapi.common import BarData, HistoricalTick, ListOfHistoricalTick, TagValueList, TickAttrib, TickerId
 from ibapi.contract import Contract as Contract_, ContractDetails
@@ -161,7 +162,7 @@ def reconcile_duration_bar_size(duration_str: str, bar_size_str: str) -> tuple[s
             ("value", str),
             ("currency", str)),
     streams=True)
-def get_account_summary(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
+async def get_account_summary(app: App, params: API.RequestParams, context: API.Context) -> Awaitable[API.Response]:
     request_id = app.client.get_request_id()
     app.client.reqAccountSummary(
         reqId=request_id, group="All", tags=AccountSummaryTags.AllTags)
@@ -178,7 +179,7 @@ def get_account_summary(app: App, params: API.RequestParams, context: API.Contex
             ("wap", float),
             ("count", int)),
     streams=True)
-def get_realtime_bars(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
+async def get_realtime_bars(app: App, params: API.RequestParams, context: API.Context) -> Awaitable[API.Response]:
     request_id = app.client.get_request_id()
     contract = Contract.from_symbol(params.symbol)
     app.client.reqRealTimeBars(
@@ -193,7 +194,7 @@ def get_realtime_bars(app: App, params: API.RequestParams, context: API.Context)
             ("low", float),
             ("close", float),
             ("volume", int)))
-def get_historical_bars(app: App, request: API.Request, context: API.Context) -> API.Response:
+async def get_historical_bars(app: App, request: API.Request, context: API.Context) -> Awaitable[API.Response]:
     params = request.params
     duration_str, bar_size_str = reconcile_duration_bar_size(
         resolve_duration(params.start, params.end), resolve_bar_size(params.resolution))
@@ -217,7 +218,7 @@ def get_historical_bars(app: App, request: API.Request, context: API.Context) ->
     returns=(("time", float),
             ("price", float),
             ("size", float)),)
-def get_historical_ticks(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
+async def get_historical_ticks(app: App, params: API.RequestParams, context: API.Context) -> Awaitable[API.Response]:
     request_id = app.client.get_request_id()
     contract = Contract.from_symbol(params.symbol)
     app.client.reqHistoricalTicks(
@@ -236,7 +237,7 @@ def get_historical_ticks(app: App, params: API.RequestParams, context: API.Conte
     returns=(("tick_type", int),
             ("price", float)),
     streams=True)
-def get_realtime_ticks(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
+async def get_realtime_ticks(app: App, params: API.RequestParams, context: API.Context) -> Awaitable[API.Response]:
     request_id = app.client.get_request_id()
     contract = Contract.from_symbol(params.symbol)
     app.client.reqMktData(
@@ -253,7 +254,7 @@ def get_realtime_ticks(app: App, params: API.RequestParams, context: API.Context
     returns=(("label", str),
             ("value", str))
 )
-def get_contract_details(app: App, params: API.RequestParams, context: API.Context) -> API.Response:
+async def get_contract_details(app: App, params: API.RequestParams, context: API.Context) -> Awaitable[API.Response]:
     request_id = app.client.get_request_id()
     contract = Contract.from_symbol(params.symbol)
     app.client.reqContractDetails(reqId=request_id, contract=contract)

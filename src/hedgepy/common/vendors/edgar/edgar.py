@@ -19,7 +19,7 @@ def format_tickers(response: API.Response) -> API.Response:
 @API.register_getter(formatter=format_tickers, returns=(("cik", str), ("ticker", str)))
 def get_tickers(
     app: ClientSession, params: API.RequestParams, context: API.Context
-) -> Awaitable:
+) -> Awaitable[API.Response]:
     return app.get(url="https://sec.gov/files/company_tickers.json")
 
 
@@ -57,7 +57,7 @@ def format_submissions(response: API.Response) -> API.Response:
 )
 def get_submissions(
     app: ClientSession, params: API.RequestParams, context: API.Context
-) -> Awaitable:
+) -> Awaitable[API.Response]:
     return app.get(url=f"https://data.sec.gov/submissions/CIK{params.symbol}.json")
 
 
@@ -93,7 +93,7 @@ def format_concept(response: API.Response) -> API.Response:
 )
 def get_concept(
     app: ClientSession, params: API.RequestParams, context: API.Context
-) -> Awaitable:
+) -> Awaitable[API.Response]:
     cik, tag = params.symbol
     return app.get(
         url=f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}/us-gaap/{tag}.json"
@@ -145,7 +145,7 @@ def format_facts(response: API.Response):
 )
 def get_facts(
     app: ClientSession, params: API.RequestParams, context: API.Context
-) -> Awaitable:
+) -> Awaitable[API.Response]:
     return app.get(
         url=f"https://data.sec.gov/api/xbrl/companyfacts/CIK{params.symbol}.json"
     )
@@ -204,7 +204,7 @@ def _last_period():
 )
 def get_frame(
     app: ClientSession, params: API.RequestParams, context: API.Context
-) -> API.Response:
+) -> Awaitable[API.Response]:
     tag, period = params.symbol.split()
     period = period if period else _last_period()
     return app.get(

@@ -39,7 +39,7 @@ def merge_params(params: dict, **kwargs) -> dict:
 )
 def get_series(
     app: ClientSession, params: API.RequestParams, context: API.Context
-) -> Awaitable:
+) -> Awaitable[API.Response]:
     params = merge_params(context.params, series_id=params.symbol)
     return app.get(url="/fred/series", params=params)
 
@@ -58,7 +58,7 @@ def get_series_observations(
     params: API.RequestParams,
     context: API.Context,
     offset: int = 0,
-) -> Awaitable:
+) -> Awaitable[API.Response]:
     params = merge_params(
         context.params,
         series_id=params.symbol,
@@ -77,7 +77,7 @@ def get_series_vintage_dates(
     params: API.RequestParams,
     context: API.Context,
     offset: int = 0,
-) -> Awaitable:
+) -> Awaitable[API.Response]:
     params = merge_params(context.params, series_id=params.symbol, offset=offset)
     return app.get(url="/fred/series/vintagedates", params=params)
 
@@ -95,7 +95,7 @@ def get_series_vintage_dates(
 )
 def get_series_release(
     app: ClientSession, params: API.RequestParams, context: API.Context
-) -> Awaitable:
+) -> Awaitable[API.Response]:
     params = merge_params(context.params, series_id=params.symbol)
     return app.get(url="/fred/series/release", params=params)
 
@@ -113,7 +113,7 @@ def get_series_release(
 )
 def get_releases(
     app: ClientSession, params: API.RequestParams, context: API.Context
-) -> Awaitable:
+) -> Awaitable[API.Response]:
     return app.get(url="/fred/releases", params=context.params)
 
 
@@ -130,7 +130,7 @@ def get_releases(
 )
 def get_release(
     app: ClientSession, params: API.RequestParams, context: API.Context
-) -> Awaitable:
+) -> Awaitable[API.Response]:
     params = merge_params(context.params, release_id=params.symbol)
     return app.get(url="/fred/release", params=params)
 
@@ -161,7 +161,7 @@ def get_release_series(
     params: API.RequestParams,
     context: API.Context,
     offset: int = 0,
-) -> Awaitable:
+) -> Awaitable[API.Response]:
     params = merge_params(context.params, release_id=params.symbol, offset=offset)
     return app.get(url="/fred/release/series", params=params)
 
@@ -178,6 +178,6 @@ def get_release_dates(
     params: API.RequestParams,
     context: API.Context,
     offset: int = 0,
-) -> Awaitable:
+) -> Awaitable[API.Response]:
     params = merge_params(context.params, offset=offset)
     return app.get(url="/fred/release/dates", params=params)

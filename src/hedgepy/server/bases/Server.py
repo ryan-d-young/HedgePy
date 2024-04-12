@@ -10,7 +10,7 @@ from hedgepy.common.bases import API
 from hedgepy.common.utils import config, dtwrapper, logger
 
 
-LOGGER = logger.get_logger(__name__)
+LOGGER = logger.get(__name__)
 
 
 class ResponseManager(UserDict):
@@ -55,7 +55,6 @@ class LogicMixin(ABC):
     async def run(self):
         while self._running:
             try: 
-                print("Server cycle", time())
                 await self.cycle() 
             except KeyboardInterrupt:
                 await self.stop_loop()
@@ -143,11 +142,10 @@ class Server(BaseServer):
         try: 
             request: API.Request = self._request_queue.get_nowait()
             vendor: API.Vendor = self.vendors[request.vendor]
-            fn: API.Getter = vendor[request.endpoint]
-            
-            request = request.prepare()
+            fn: API.Target = vendor[request.endpoint]
             LOGGER.debug(f"Processing request {request}")
             
+            request = request.prepare()
             response = fn(vendor.app, request, vendor.context)
 
             if isinstance(response, Awaitable):
