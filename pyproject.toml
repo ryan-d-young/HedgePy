@@ -3,14 +3,14 @@ name = "hedgepy"
 version = "0.1.0"
 description = "Add your description here"
 dependencies = [
-    "requests>=2.31.0",
     "python-dotenv>=1.0.1",
     "psycopg[binary,pool]>=3.1.18",
     "pip>=24.0",
-    "ibapi @ file:///home/ryan/app/staging/lib/ibkr",
-    "textual>=0.52.1",
+    "ibapi @ file:///home/ryan/app/dev/lib/ibkr",
     "jsonschema>=4.21.1",
     "aiohttp[speedups]>=3.9.3",
+    "holidays>=0.46",
+    "python-dateutil>=2.9.0.post0",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
@@ -23,7 +23,6 @@ build-backend = "hatchling.build"
 managed = true
 dev-dependencies = [
     "ipython>=8.12.3",
-    "textual-dev>=1.5.1",
 ]
 
 [tool.hatch.metadata]

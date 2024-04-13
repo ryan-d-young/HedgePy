@@ -2,6 +2,7 @@ import json
 import asyncio
 from abc import ABC, abstractmethod
 from functools import wraps
+from itertools import chain
 from typing import Any, Callable, Awaitable, Self, Generator
 from dataclasses import dataclass, asdict
 from uuid import uuid4, UUID
@@ -61,33 +62,59 @@ class Context:
                     
         elif derived_vars:
             raise ValueError("Derived variables require static variables")
-                    
+
         self.__setattr__ = self._immutable
         self.__delattr__ = self._immutable
-
+                    
     @staticmethod
-    def _immutable():
+    def _immutable(*args, **kwargs):
         raise AttributeError("Context is immutable")
 
 
 @dataclass
 class RequestParams:
-    start: str | None = None
-    end: str | None = None
-    resolution: str | None = None
+    start: dtwrapper.datetime | None = None
+    end: dtwrapper.datetime | None = None
+    resolution: dtwrapper.timedelta | None = None
     symbol: str | None = None
 
     def __post_init__(self):
+        for attr in ("start", "end"):
+            if getattr(self, attr) and not isinstance(getattr(self, attr), dtwrapper.datetime):
+                try:
+                    setattr(self, attr, dtwrapper.str_to_dt(getattr(self, attr)))
+                except ValueError:
+                    raise ValueError(f"Invalid datetime format for {attr}")
+        if isinstance(self.resolution, str):
+            try:
+                self.resolution = dtwrapper.str_to_td(self.resolution)
+            except ValueError:
+                raise ValueError(f"Invalid timedelta format for {self.resolution}")
         self._kwargs = {k: v for k, v in asdict(self).items() if v is not None}
         
     @property
     def kwargs(self) -> dict:
         return self._kwargs
     
-    def prepare(self) -> "RequestParams":
-        start, end = dtwrapper.format(self.start, self.end)
-        resolution = dtwrapper.str_to_td(self.resolution)
-        return RequestParams(start=start, end=end, resolution=resolution, symbol=self.symbol)
+    @classmethod
+    def from_js(cls, js: dict) -> Self:
+        dtwrapper.UDt.select_fmt()
+        if js.get("start"):
+            js["start"] = dtwrapper.UDt.convert(js["start"])
+        if js.get("end"):
+            js["end"] = dtwrapper.UDt.convert(js["end"])
+        if js.get("resolution"):
+            js["resolution"] = dtwrapper.UDur.convert(js["resolution"])
+        return cls(**js)
+    
+    def to_js(self) -> dict:
+        dtwrapper.UDt.select_fmt()
+        return {
+            "start": dtwrapper.UDt.convert(self.start),
+            "end": dtwrapper.UDt.convert(self.end),
+            "resolution": dtwrapper.UDur.convert(self.resolution),
+            "symbol": self.symbol
+        }
 
 
 @dataclass
@@ -108,23 +135,26 @@ class Request:
         return {
             "vendor": self.vendor,
             "endpoint": self.endpoint,
-            "params": self.params.kwargs,
+            "params": self.params.to_js(),
             }  # to_js is only called client-side, so corr_id is not included
 
-    def encode(self) -> str:
-        return json.dumps(self.js())
+    @classmethod
+    def from_js(cls, js: dict, corr_id: CorrID | None = None) -> Self:  # from_js is only called server-side
+        params = js.pop("params", {})
+        return cls(**js, corr_id=corr_id, params=RequestParams.from_js(params))
     
     @classmethod
-    def from_js(cls, js: dict, corr_id: CorrID) -> Self:  # from_js is only called server-side
-        params = js.pop("params", {})
-        return cls(**js, corr_id=corr_id, params=RequestParams(**params))
-
-    def decode(self, data: str) -> Self:
-        return self.from_js(json.loads(data))
-    
-    def prepare(self) -> Self:
-        self.params = self.params.prepare()
-        return self
+    def from_template(cls, common: dict, template: dict) -> Self:
+        request_js, params_js = {}, {}
+        for k, v in chain(common.items(), template.items()):
+            if k in ("start", "end", "resolution", "symbol"):
+                params_js[k] = v
+            elif k in ("vendor", "endpoint"):
+                request_js[k] = v
+            else: 
+                raise ValueError(f"Invalid request parameter {k}={v}")
+        request_js["params"] = params_js
+        return cls.from_js(request_js)
 
 
 @dataclass
@@ -202,9 +232,21 @@ class Getter:
         self.target = target
         self._lock = asyncio.Lock()
         
-    async def __call__(self, app: App, request: Request, context: Context, **kwargs) -> Awaitable[Response]:
+    @property
+    def returns(self) -> Fields:
+        return self.target.returns
+    
+    @property
+    def formatter(self) -> Formatter:
+        return self.target.formatter
+    
+    @property
+    def streams(self) -> bool:
+        return self.target.streams
+        
+    async def __call__(self, app: App, request: Request, context: Context, **kwargs) -> Response:
         async with self._lock:
-            return self.target(app, request, context, **kwargs)
+            return await self.target(app, request, context, **kwargs)
 
 
 class RateLimiter(Getter):
@@ -214,35 +256,38 @@ class RateLimiter(Getter):
         self.history = deque(maxlen=max_requests)
 
     async def __call__(self, app: App, request: Request, context: Context) -> Response:
-        time = dtwrapper.t_now()
+        time = dtwrapper.now()
         
         try:
             elapsed = time - self.history.popleft()
         except IndexError:  # history is empty
+            
             elapsed = self.interval
-        finally:
-            if elapsed < self.interval:
-                sleep_time, vendor, endpoint = self.interval - elapsed, request.vendor, request.endpoint
-                LOGGER.info(f"Rate limit exceeded for {vendor} {endpoint}, waiting {sleep_time}s")
-                await asyncio.sleep(sleep_time)
-            response = await self.target.__call__(app, request, context)
-            self.history.append(time)
+        if elapsed < self.interval:
+            sleep_time = self.interval - elapsed
+            LOGGER.info(f"Rate limit exceeded for {request.vendor} {request.endpoint}, waiting {sleep_time}s")
+            await asyncio.sleep(sleep_time)
+        response = await self.target.__call__(app, request, context)
+        self.history.append(time)
 
         return response
 
 
 class TimeChunker(Getter):
-    def __init__(self, target: Target, chunk_schedule: dict[str, str]):  # dict[resolution, max_duration]
+    def __init__(self, target: Target, chunk_schedule: dict[str, str], corr_id_fn: CorrIDFn):  # dict[resolution, max_duration]
         super().__init__(target)
         self.chunk_schedule = dict(zip(
             map(dtwrapper.str_to_td, chunk_schedule.keys()), 
             map(dtwrapper.str_to_td, chunk_schedule.values())))
+        self._corr_id_fn = corr_id_fn
         
     async def _chunk(self, app: App, request: Request, context: Context, 
-                     n_chunks: int, max_duration: dtwrapper.datetime.timedelta) -> Response:
-        corr_id, request_start = request.corr_id, dtwrapper.str_to_dt(request.params.start)
-        responses = {}
-        
+                     n_chunks: int, max_duration: dtwrapper.timedelta) -> dict[CorrID, Response]:
+        responses = {}        
+
+        corr_id, request_start = request.corr_id, request.params.start
+        request_end = request_start + max_duration
+
         for _ in range(n_chunks - 1):
             request = Request(
                 corr_id=corr_id,
@@ -250,31 +295,46 @@ class TimeChunker(Getter):
                 endpoint=request.endpoint,
                 params=RequestParams(
                     start=request_start, 
-                    end=request_start + max_duration, 
+                    end=request_end, 
                     resolution=request.params.resolution, 
                     symbol=request.params.symbol)
                 )
             
             responses[request.corr_id] = await self.target.__call__(app, request, context)
-            request_start = request.params.end + request.params.resolution
-            corr_id = request.corr_id_fn(app)
+
+            request_start = request_end + request.params.resolution
+            request_end = request_start + max_duration
+            corr_id = self._corr_id_fn(app)
             
+        stub_request = Request(
+            corr_id=corr_id,
+            vendor=request.vendor, 
+            endpoint=request.endpoint,
+            params=RequestParams(
+                start=request_end + request.params.resolution, 
+                end=request.params.end, 
+                resolution=request.params.resolution, 
+                symbol=request.params.symbol)
+            )
+        
+        responses[stub_request.corr_id] = await self.target.__call__(app, stub_request, context)
         return responses
-         
+    
     async def __call__(self, app: App, request: Request, context: Context) -> Response:
-        request_resolution = request.params.resolution
-        request_end = request.params.end if request.params.end else dtwrapper.t_now()
-        request_duration = request_end - dtwrapper.str_to_dt(request.params.start)
+        request_end = request.params.end if request.params.end else dtwrapper.timestamp()
+        request_duration = request_end - request.params.start
+        responses = None
 
         for resolution, max_duration in self.chunk_schedule.items():
-            if request_resolution <= resolution:
-                n_chunks = request_duration // max_duration
-                if n_chunks > 1:
+            if request.params.resolution <= resolution:                
+                if (n_chunks := request_duration // max_duration) > 1:
                     LOGGER.info(f"Chunking {request.vendor} {request.endpoint} into {n_chunks} chunks")
-                    response = await self._chunk(app, request, context, n_chunks)
-                else:
-                    response = await self.target.__call__(app, request, context)
-        return response
+                    responses = await self._chunk(app, request, context, n_chunks, max_duration)
+
+        if not responses:  # the first if statement never evaluated to True; no chunking required
+            responses = await self.target.__call__(app, request, context)
+
+        return responses
            
 
 @dataclass
@@ -349,6 +409,8 @@ class Vendors:
         for vendor in (Path(root) / 'common' / 'vendors').iterdir():
             mod = import_module(f"hedgepy.common.vendors.{vendor.stem}")
             vendors[vendor.stem] = Vendor.from_spec(mod.spec)
+            if hasattr(mod.spec.context, "DTFMT"):
+                dtwrapper.UDt.register_fmt(vendor.stem, mod.spec.context.DTFMT)
         return vendors
 
     async def stop_vendors(self):

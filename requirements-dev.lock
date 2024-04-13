@@ -13,7 +13,6 @@ aiodns==3.1.1
 aiohttp==3.9.3
     # via aiohttp
     # via hedgepy
-    # via textual-dev
 aiosignal==1.3.1
     # via aiohttp
 asttokens==2.4.1
@@ -24,14 +23,8 @@ attrs==23.2.0
     # via referencing
 brotli==1.1.0
     # via aiohttp
-certifi==2024.2.2
-    # via requests
 cffi==1.16.0
     # via pycares
-charset-normalizer==3.3.2
-    # via requests
-click==8.1.7
-    # via textual-dev
 decorator==5.1.1
     # via ipython
 executing==2.0.1
@@ -39,10 +32,11 @@ executing==2.0.1
 frozenlist==1.4.1
     # via aiohttp
     # via aiosignal
-ibapi @ file:///home/ryan/app/staging/lib/ibkr
+holidays==0.46
+    # via hedgepy
+ibapi @ file:///home/ryan/app/dev/lib/ibkr
     # via hedgepy
 idna==3.6
-    # via requests
     # via yarl
 ipython==8.21.0
 jedi==0.19.1
@@ -51,21 +45,8 @@ jsonschema==4.21.1
     # via hedgepy
 jsonschema-specifications==2023.12.1
     # via jsonschema
-linkify-it-py==2.0.3
-    # via markdown-it-py
-markdown-it-py==3.0.0
-    # via markdown-it-py
-    # via mdit-py-plugins
-    # via rich
-    # via textual
 matplotlib-inline==0.1.6
     # via ipython
-mdit-py-plugins==0.4.0
-    # via markdown-it-py
-mdurl==0.1.2
-    # via markdown-it-py
-msgpack==1.0.7
-    # via textual-dev
 multidict==6.0.5
     # via aiohttp
     # via yarl
@@ -92,39 +73,28 @@ pycparser==2.21
     # via cffi
 pygments==2.17.2
     # via ipython
-    # via rich
+python-dateutil==2.9.0.post0
+    # via hedgepy
+    # via holidays
 python-dotenv==1.0.1
     # via hedgepy
 referencing==0.33.0
     # via jsonschema
     # via jsonschema-specifications
-requests==2.31.0
-    # via hedgepy
-rich==13.7.1
-    # via textual
 rpds-py==0.18.0
     # via jsonschema
     # via referencing
 six==1.16.0
     # via asttokens
+    # via python-dateutil
 stack-data==0.6.3
     # via ipython
-textual==0.52.1
-    # via hedgepy
-    # via textual-dev
-textual-dev==1.5.1
 traitlets==5.14.1
     # via ipython
     # via matplotlib-inline
 typing-extensions==4.9.0
     # via psycopg
     # via psycopg-pool
-    # via textual
-    # via textual-dev
-uc-micro-py==1.0.3
-    # via linkify-it-py
-urllib3==2.2.0
-    # via requests
 wcwidth==0.2.13
     # via prompt-toolkit
 yarl==1.9.4

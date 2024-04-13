@@ -7,8 +7,6 @@
         "resolution": "PT1H"
     },
     "templates": [
-        {"symbol": "IND.NDQ.USD.SMART"}, 
-        {"symbol": "IND.SPX.USD.SMART"}, 
-        {"symbol": "IND.DJI.USD.SMART"}
+        {"symbol": "CASH.EUR.USD.IDEALPRO"}
     ]
 }

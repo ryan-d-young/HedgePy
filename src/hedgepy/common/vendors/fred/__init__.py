@@ -5,9 +5,14 @@ from hedgepy.common.vendors.fred import fred
 context = API.Context(
     static_vars={
         "key": API.EnvironmentVariable("api.fred.key"),
-        "file_type": "json"
-    },
-    derived_vars={"http_params": lambda self: {"api_key": self.key.value, "file_type": self.file_type}}
+        "file_type": "json", 
+        "DFMT": "%Y-%m-%d",
+        "TFMT": "%H:%M:%S-05"
+        },
+    derived_vars={
+        "http_params": lambda self: {"api_key": self.key.value, "file_type": self.file_type}, 
+        "DTFMT": lambda self: " ".join((self.DFMT, self.TFMT))
+        }
 )
 
 

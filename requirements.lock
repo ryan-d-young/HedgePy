@@ -21,35 +21,21 @@ attrs==23.2.0
     # via referencing
 brotli==1.1.0
     # via aiohttp
-certifi==2024.2.2
-    # via requests
 cffi==1.16.0
     # via pycares
-charset-normalizer==3.3.2
-    # via requests
 frozenlist==1.4.1
     # via aiohttp
     # via aiosignal
-ibapi @ file:///home/ryan/app/staging/lib/ibkr
+holidays==0.46
+    # via hedgepy
+ibapi @ file:///home/ryan/app/dev/lib/ibkr
     # via hedgepy
 idna==3.6
-    # via requests
     # via yarl
 jsonschema==4.21.1
     # via hedgepy
 jsonschema-specifications==2023.12.1
     # via jsonschema
-linkify-it-py==2.0.3
-    # via markdown-it-py
-markdown-it-py==3.0.0
-    # via markdown-it-py
-    # via mdit-py-plugins
-    # via rich
-    # via textual
-mdit-py-plugins==0.4.0
-    # via markdown-it-py
-mdurl==0.1.2
-    # via markdown-it-py
 multidict==6.0.5
     # via aiohttp
     # via yarl
@@ -64,30 +50,22 @@ pycares==4.4.0
     # via aiodns
 pycparser==2.21
     # via cffi
-pygments==2.17.2
-    # via rich
+python-dateutil==2.9.0.post0
+    # via hedgepy
+    # via holidays
 python-dotenv==1.0.1
     # via hedgepy
 referencing==0.33.0
     # via jsonschema
     # via jsonschema-specifications
-requests==2.31.0
-    # via hedgepy
-rich==13.7.1
-    # via textual
 rpds-py==0.18.0
     # via jsonschema
     # via referencing
-textual==0.52.1
-    # via hedgepy
+six==1.16.0
+    # via python-dateutil
 typing-extensions==4.9.0
     # via psycopg
     # via psycopg-pool
-    # via textual
-uc-micro-py==1.0.3
-    # via linkify-it-py
-urllib3==2.2.0
-    # via requests
 yarl==1.9.4
     # via aiohttp
 pip==24.0

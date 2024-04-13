@@ -41,7 +41,7 @@ class LogicMixin(ABC):
 
     def _cleanup(self):
         self._running: bool = False
-        self._request_queue: asyncio.PriorityQueue = asyncio.PriorityQueue()
+        self._request_queue: asyncio.Queue = asyncio.Queue()
         self._responses: ResponseManager = ResponseManager()
 
     @abstractmethod
@@ -111,7 +111,7 @@ class Server(BaseServer):
         self._vendors = API.Vendors()
         
     @property
-    def requests(self) -> asyncio.PriorityQueue:
+    def requests(self) -> asyncio.Queue:
         return self._request_queue
     
     @property
@@ -145,7 +145,6 @@ class Server(BaseServer):
             fn: API.Target = vendor[request.endpoint]
             LOGGER.debug(f"Processing request {request}")
             
-            request = request.prepare()
             response = fn(vendor.app, request, vendor.context)
 
             if isinstance(response, Awaitable):
@@ -177,7 +176,6 @@ class Server(BaseServer):
         request_js = await request.json()
         vendor = self.vendors[request_js['vendor']]
         corr_id = vendor.corr_id_fn(vendor.app)        
-        
         request_obj = API.Request.from_js(request_js, corr_id)
         await self.requests.put(request_obj)
         

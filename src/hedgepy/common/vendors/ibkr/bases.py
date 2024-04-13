@@ -51,7 +51,7 @@ class Connection:
         return self.request_id
 
     async def connect(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-        self._reader, self._writer = await asyncio.open_connection(*self._conninfo)
+        self._reader, self._writer = await asyncio.open_connection(*self._conninfo, limit=2**32)
 
     @property
     def connected(self) -> bool:
@@ -69,7 +69,7 @@ class Connection:
         try: 
             self.buffer += await asyncio.wait_for(
                 self._reader.readuntil(Connection.MSG_SEP),
-                timeout=0.2)  # matches EClient's timeout
+                timeout=1)  # NB: EClient's timeout is 0.2
         except asyncio.IncompleteReadError as e:
             self.buffer += e.partial
         except asyncio.TimeoutError:

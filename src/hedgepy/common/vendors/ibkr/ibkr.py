@@ -116,24 +116,33 @@ def resolve_bar_size(resolution: timedelta) -> str:
     """https://ibkrcampus.com/ibkr-api-page/twsapi-doc/#hist-bar-size"""
     s = int(resolution.total_seconds())
     if s < 60:
-        return f"{s} secs" if s in (1, 5, 10, 15, 30) else "30 secs"
+        if s == 1:
+            return "1 sec"
+        return f"{s} secs" if s in (5, 10, 15, 30) else "30 secs"
     elif s < 60 * 60:
         m = s // 60
-        return f"{m} mins" if m in (1, 2, 3, 5, 10, 15, 20, 30) else "30 mins"
+        if m == 1:
+            return "1 min"
+        return f"{m} mins" if m in (2, 3, 5, 10, 15, 20, 30) else "30 mins"
     elif s < 60 * 60 * 24:
         h = s // (60 * 60)
-        return f"{h} hrs" if h in (1, 2, 3, 4, 8) else "1 hrs"
+        if h == 1:
+            return "1 hour"
+        return f"{h} hours" if h in (2, 3, 4, 8) else "1 hour"
     elif s < 60 * 60 * 24 * 7:
-        return "1 days"
+        return "1 day"
     elif s < 60 * 60 * 24 * 30:
-        return "1 weeks"
+        return "1W"
     else:
-        return "1 months"
+        return "1M"
     
     
 def reconcile_duration_bar_size(duration_str: str, bar_size_str: str) -> tuple[str, str]:
     _, duration_unit = duration_str.split()
-    bar_size_value, bar_size_unit = bar_size_str.split()
+    if "W" in bar_size_str or "M" in bar_size_str:
+        bar_size_value, bar_size_unit = bar_size_str[0], bar_size_str[1]
+    else:    
+        bar_size_value, bar_size_unit = bar_size_str.split()
     duration_to_bar_size_limits = {
         "S": (1, 60), 
         "D": (5, 60 * 60),
@@ -143,10 +152,13 @@ def reconcile_duration_bar_size(duration_str: str, bar_size_str: str) -> tuple[s
     }
     min_bar_size_value, max_bar_size_value = duration_to_bar_size_limits[duration_unit]    
     bar_size_unit_to_seconds = {
+        "sec": 1,
         "secs": 1,
+        "min": 60,
         "mins": 60,
-        "hrs": 60 * 60,
-        "days": 60 * 60 * 24,
+        "hour": 60 * 60,
+        "hours": 60 * 60,
+        "day": 60 * 60 * 24,
         "weeks": 60 * 60 * 24 * 7,
         "months": 60 * 60 * 24 * 30
     }
@@ -162,7 +174,7 @@ def reconcile_duration_bar_size(duration_str: str, bar_size_str: str) -> tuple[s
             ("value", str),
             ("currency", str)),
     streams=True)
-async def get_account_summary(app: App, params: API.RequestParams, context: API.Context) -> Awaitable[API.Response]:
+async def get_account_summary(app: App, request: API.Request, context: API.Context) -> Awaitable[API.Response]:
     request_id = app.client.get_request_id()
     app.client.reqAccountSummary(
         reqId=request_id, group="All", tags=AccountSummaryTags.AllTags)
@@ -179,12 +191,13 @@ async def get_account_summary(app: App, params: API.RequestParams, context: API.
             ("wap", float),
             ("count", int)),
     streams=True)
-async def get_realtime_bars(app: App, params: API.RequestParams, context: API.Context) -> Awaitable[API.Response]:
+async def get_realtime_bars(app: App, request: API.Request, context: API.Context) -> Awaitable[API.Response]:
     request_id = app.client.get_request_id()
-    contract = Contract.from_symbol(params.symbol)
+    contract = Contract.from_symbol(request.params.symbol)
     app.client.reqRealTimeBars(
         reqId=request_id, contract=contract, barSize=5, whatToShow="MIDPOINT", useRTH=False)  
-    return API.Response(request=request_id)
+    data = await app.client.get_response(request_id)
+    return API.Response(request=request, data=data)
 
 
 @API.register_getter(
@@ -195,11 +208,10 @@ async def get_realtime_bars(app: App, params: API.RequestParams, context: API.Co
             ("close", float),
             ("volume", int)))
 async def get_historical_bars(app: App, request: API.Request, context: API.Context) -> Awaitable[API.Response]:
-    params = request.params
     duration_str, bar_size_str = reconcile_duration_bar_size(
-        resolve_duration(params.start, params.end), resolve_bar_size(params.resolution))
-    end_datetime_str = params.end.strftime(context.DTFMT) if params.end else ""
-    contract = Contract.from_symbol(params.symbol)
+        resolve_duration(request.params.start, request.params.end), resolve_bar_size(request.params.resolution))
+    end_datetime_str = request.params.end.strftime(context.DTFMT) if request.params.end else ""
+    contract = Contract.from_symbol(request.params.symbol)
     app.client.reqHistoricalData(
         reqId=request.corr_id, 
         contract=contract, 
@@ -218,7 +230,7 @@ async def get_historical_bars(app: App, request: API.Request, context: API.Conte
     returns=(("time", float),
             ("price", float),
             ("size", float)),)
-async def get_historical_ticks(app: App, params: API.RequestParams, context: API.Context) -> Awaitable[API.Response]:
+async def get_historical_ticks(app: App, request: API.Request, context: API.Context) -> Awaitable[API.Response]:
     request_id = app.client.get_request_id()
     contract = Contract.from_symbol(params.symbol)
     app.client.reqHistoricalTicks(
@@ -237,7 +249,7 @@ async def get_historical_ticks(app: App, params: API.RequestParams, context: API
     returns=(("tick_type", int),
             ("price", float)),
     streams=True)
-async def get_realtime_ticks(app: App, params: API.RequestParams, context: API.Context) -> Awaitable[API.Response]:
+async def get_realtime_ticks(app: App, request: API.Request, context: API.Context) -> Awaitable[API.Response]:
     request_id = app.client.get_request_id()
     contract = Contract.from_symbol(params.symbol)
     app.client.reqMktData(
@@ -254,7 +266,7 @@ async def get_realtime_ticks(app: App, params: API.RequestParams, context: API.C
     returns=(("label", str),
             ("value", str))
 )
-async def get_contract_details(app: App, params: API.RequestParams, context: API.Context) -> Awaitable[API.Response]:
+async def get_contract_details(app: App, request: API.Request, context: API.Context) -> Awaitable[API.Response]:
     request_id = app.client.get_request_id()
     contract = Contract.from_symbol(params.symbol)
     app.client.reqContractDetails(reqId=request_id, contract=contract)

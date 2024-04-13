@@ -6,8 +6,13 @@ context = API.Context(
     static_vars={
         "company": API.EnvironmentVariable("api.edgar.company"),
         "email": API.EnvironmentVariable("api.edgar.email"),
-    },
-    derived_vars={"user_agent": lambda self: f"{self.company.value} {self.email.value}"},
+        "DFMT": "%Y-%m-%d",
+        "TFMT": "%H:%M:%S"
+        },
+    derived_vars={
+        "user_agent": lambda self: f"{self.company.value} {self.email.value}", 
+        "DTFMT": lambda self: " ".join((self.DFMT, self.TFMT))
+        }
 )
 
 

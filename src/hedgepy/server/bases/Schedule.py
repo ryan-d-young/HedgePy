@@ -11,7 +11,11 @@ class ScheduleItem:
     request: API.Request
     interval: int | None = None
 
-
+    @classmethod
+    def from_request(cls, request: API.Request):
+        return cls(request=request, interval=request.params.resolution)
+        
+        
 @dataclass
 class Schedule:
     start: datetime.timedelta 
