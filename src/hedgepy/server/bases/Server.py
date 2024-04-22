@@ -201,7 +201,7 @@ class Server(BaseServer):
                 "pending_requests": self.requests.qsize(), 
                 "pending_responses": len(self.responses)
                 })
-
+            
     async def _handle_post(self, request: web.BaseRequest) -> web.Response:
         LOGGER.debug(f"Received POST request {request}")
         
@@ -210,14 +210,14 @@ class Server(BaseServer):
         corr_id = vendor.corr_id_fn(vendor.app)   
         request_js['corr_id'] = corr_id
 
-        if resource := request_js['params'].pop('resource', None):
-            cls_name = resource.pop('class')
-            for cls in vendor.resources:
-                if cls_name.lower() == cls.__name__.lower():
-                    request_js['params']['resource'] = cls(**resource)
-                    break
+        if resource_handle := request_js['params'].pop('resource', None):
+            qualname, *field_values = resource_handle.split("_")
+            *_, vendor, cls_name = qualname.split(".")
+            cls = self.vendors[vendor].resources[cls_name]
+            resource_handle = "_".join(field_values)
+            resource = cls.decode(resource_handle)
 
-        request_obj = API.Request.decode(request_js)
+        request_obj = API.Request.decode(request_js).bind_resource(resource)
         await self.requests.put(request_obj)
         
         return web.json_response({'corr_id': corr_id})

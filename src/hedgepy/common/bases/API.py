@@ -86,11 +86,12 @@ class Context(_ImmutableDict):
 class Resource(_ImmutableDict):
     CONSTANT: Parameters = ()
     VARIABLE: Parameters = ()
+    HANDLE_FMT: str = ""
     
     def __init__(self, **kwargs: dict[str, Any]):
         di = {}
         
-        for field, required, default in chain(self.CONSTANT, self.VARIABLE):
+        for field, required, default in chain(self.VARIABLE, self.CONSTANT):
             if field.name in kwargs:
                 arg_value = kwargs.pop(field.name)
             elif required:
@@ -111,6 +112,17 @@ class Resource(_ImmutableDict):
             raise ValueError(f"Invalid keyword argument(s) provided {kwargs}")
             
         super().__init__(**di)
+        
+    def encode(self) -> str:
+        return "_".join((self.qualname, self.HANDLE_FMT.format(**self)))
+    
+    @classmethod
+    def decode(cls, handle: str) -> Self:
+        return cls(**dict(zip(
+            map(lambda x: x[1:-1],  # remove curly braces
+                cls.HANDLE_FMT.split("_")), 
+            handle.split("_")
+            )))
 
 
 @dataclass
@@ -125,7 +137,7 @@ class RequestParams:
             "start": dtwrapper.dt_to_str(self.start),
             "end": dtwrapper.dt_to_str(self.end),
             "resolution": dtwrapper.td_to_str(self.resolution),
-            "resource": self.resource
+            "resource": self.resource.encode()
         }
         
     @classmethod
@@ -169,13 +181,16 @@ class Request:
         )
     
     @classmethod
-    def from_template(cls, common: dict, request: dict) -> Self:
-        merged = {**common, **request}
-        return cls(
-            vendor=merged.pop("vendor"), 
-            endpoint=merged.pop("endpoint"), 
-            params=RequestParams.decode(merged)
-            )
+    def from_flat_dict(cls, flat_dict: dict) -> Self:
+        vendor = flat_dict.pop("vendor", None)
+        endpoint = flat_dict.pop("endpoint", None)
+        corr_id = flat_dict.pop("corr_id", None)
+        params = RequestParams.decode(flat_dict)
+        return cls(vendor=vendor, endpoint=endpoint, params=params, corr_id=corr_id)
+    
+    def bind_resource(self, resource: Resource) -> Self:
+        self.params.resource = resource
+        return self
 
 
 @dataclass
@@ -378,7 +393,11 @@ class Vendor:
         self.getters = getters
         self.runner = runner
         self.corr_id_fn = corr_id_fn if corr_id_fn else uuid4
-        self.resources = resources
+        
+        if resources:
+            self.resources = dict(zip(map(lambda x: x.__name__, resources), resources))
+        else:
+            self.resources = {}
         
     def __getitem__(self, endpoint: str) -> Target:
         return self.getters[endpoint]

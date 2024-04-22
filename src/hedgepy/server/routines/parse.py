@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from hedgepy.common.bases import Template
 from hedgepy.common.bases import API
+from hedgepy.server.bases import Server
 from hedgepy.server.bases.Schedule import ScheduleItem, Schedule
 
 
@@ -12,19 +13,37 @@ def generate_schedule(requests: tuple[API.RequestParams], first_cycle: timedelta
     return Schedule(start=first_cycle, stop=last_cycle, interval=min_interval, items=requests)
 
 
-def flatten(templates: dict[str, dict]) -> tuple[ScheduleItem]:
+def _resolve_request(template_common: dict, request_in: dict) -> dict:
+    request_out = template_common.copy()
+    request_out.update(request_in)
+    return request_out
+
+
+def _decode_request(encoded_request: dict, server_inst: Server) -> dict:
+    if (resource_di := encoded_request.pop("resource", None)) is not None:
+        vendor_inst = server_inst.vendors[encoded_request["vendor"]]
+        resource_cls_name = resource_di["class"]
+        resource_cls = vendor_inst.resources[resource_cls_name]
+        resource_inst = resource_cls.decode(resource_di["handle"])
+        encoded_request["resource"] = resource_inst
+    return encoded_request
+
+
+def flatten(templates: dict[str, dict], server_inst: Server) -> tuple[ScheduleItem]:
     schedule_items = ()
     for template in templates.values():
         template_common = template.pop("common", {})
         for request_in in template.get("templates", []):
-            api_request_out = API.Request.from_template(template_common, request_in)
-            schedule_items += (ScheduleItem.from_request(api_request_out),)
+            encoded_request = _resolve_request(template_common, request_in)
+            decoded_request = _decode_request(encoded_request, server_inst)
+            request = API.Request.from_flat_dict(decoded_request)
+            schedule_items += (ScheduleItem.from_request(request),)
     return schedule_items
 
 
-def parse(daemon_start: timedelta, daemon_stop: timedelta) -> Schedule:
+def parse(daemon_start: timedelta, daemon_stop: timedelta, server_inst: Server) -> Schedule:
     templates = Template.get_templates()
-    flattened = flatten(templates)
+    flattened = flatten(templates, server_inst)
     schedule = generate_schedule(flattened, daemon_start, daemon_stop)  
     return schedule
 

@@ -22,6 +22,7 @@ class Asset(API.Resource):
     VARIABLE = ((API.Field("symbol", str), True, API.NO_DEFAULT),
                 (API.Field("currency", str), True, "USD"),
                 (API.Field("exchange", str), True, "SMART"))
+    HANDLE_FMT = "{symbol}"
 
 
 class Stock(Asset):
@@ -37,8 +38,9 @@ class Commodity(Asset):
     
     
 class Cash(Asset):
-    CONSTANT = ((API.Field("sec_type", str), True, "CASH"),)
-    
+    CONSTANT = ((API.Field("sec_type", str), True, "CASH"),
+                (API.Field("exchange", str), True, "IDEALPRO"))
+    HANDLE_FMT = "{symbol}_{currency}"
     
 class Index(Asset):
     CONSTANT = ((API.Field("sec_type", str), True, "IND"),)
@@ -61,6 +63,7 @@ class Future(API.Resource):
                 (API.Field("currency", str), True, "USD"),
                 (API.Field("exchange", str), True, "CME"),
                 (API.Field("expiry", str), True, API.NO_DEFAULT))
+    HANDLE_FMT = "{symbol}_{expiry}"
     
     
 class ContinuousFuture(API.Resource):
@@ -68,6 +71,7 @@ class ContinuousFuture(API.Resource):
     VARIABLE = ((API.Field("symbol", str), True, API.NO_DEFAULT),
                 (API.Field("currency", str), True, "USD"),
                 (API.Field("exchange", str), True, "CME"))
+    HANDLE_FMT = "{symbol}_CONT"
     
     
 class Option(API.Resource):
@@ -79,6 +83,7 @@ class Option(API.Resource):
                 (API.Field("strike", float), True, API.NO_DEFAULT),
                 (API.Field("right", str), True, "C"),
                 (API.Field("multiplier", int), True, 1))
+    HANDLE_FMT = "{symbol}_{expiry}_{strike}_{right}"
     
     
 class FutureOption(Option):

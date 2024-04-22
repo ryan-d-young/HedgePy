@@ -23,20 +23,23 @@ def _sanitize_cik(cik: int | str) -> str:
 
 class Submission(API.Resource):
     VARIABLE = ((API.Field("cik", str), True, API.NO_DEFAULT),)
+    HANDLE_FMT = "{cik}"
     
 
 class Concept(API.Resource):
     VARIABLE = ((API.Field("cik", str), True, API.NO_DEFAULT),
                 (API.Field("tag", str), True, API.NO_DEFAULT),)
-
+    HANDLE_FMT = "{cik}_{tag}"
 
 class Frame(API.Resource):
     VARIABLE = ((API.Field("tag", str), True, API.NO_DEFAULT),
                 (API.Field("period", str), True, _last_period()),)
+    HANDLE_FMT = "{tag}_{period}"
     
     
 class Facts(API.Resource):
     VARIABLE = ((API.Field("cik", str), True, API.NO_DEFAULT),)
+    HANDLE_FMT = "{cik}"
 
 
 async def format_tickers(request: API.Request, response: ClientResponse) -> API.Response:

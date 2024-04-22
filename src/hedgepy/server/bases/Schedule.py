@@ -29,7 +29,7 @@ class Schedule:
 
 
 class Daemon(Consumer.BaseConsumer):
-    START_TIME_S = 5
+    START_OFFSET_S = 5
     
     def __init__(self, env: dict):
         super().__init__(env)
@@ -48,7 +48,7 @@ class Daemon(Consumer.BaseConsumer):
         return corr_ids
         
     async def run(self):
-        await asyncio.sleep(Daemon.START_TIME_S)
+        await asyncio.sleep(Daemon.START_OFFSET_S)
         while self._running:
             print("Daemon cycle:", self._cycle)
             if self._cycle < self._schedule.cycles:

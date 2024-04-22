@@ -1,8 +1,8 @@
 import getpass
 from datetime import timedelta
+from hedgepy.common.utils import config
 from hedgepy.server.routines import dbinit, parse, process
 from hedgepy.server.bases import Schedule, Server, Database
-
 
 
 def make_server() -> Server.Server:
@@ -38,8 +38,7 @@ def make_database(dbname: str, host: str, port: int, user: str, password: str) -
         )
 
 
-async def init() -> tuple[Server.Server, Database.Database, Schedule.Daemon, Schedule.Schedule]:
-    from hedgepy.common.utils import config
+async def init() -> tuple[Server.Server, Database.Database, Schedule.Daemon]:
     
     server = make_server()
     
@@ -53,8 +52,6 @@ async def init() -> tuple[Server.Server, Database.Database, Schedule.Daemon, Sch
         )
     del dbpass
 
-    await dbinit.dbinit(server, db, reset_first=True)
-    
     daemon = make_daemon(
         host=config.get('server', 'host'), 
         port=config.get('server', 'port'), 
@@ -63,6 +60,4 @@ async def init() -> tuple[Server.Server, Database.Database, Schedule.Daemon, Sch
         interval=config.get('api', 'interval')
         )
 
-    schedule = parse.parse(daemon_start=config.get('api', 'start'), daemon_stop=config.get('api', 'stop'))
-        
-    return server, db, daemon, schedule
+    return server, db, daemon

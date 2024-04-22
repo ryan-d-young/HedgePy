@@ -7,11 +7,13 @@ from functools import partial
 class Series(API.Resource):
     VARIABLE = ((API.Field("series_id", str), True, API.NO_DEFAULT),
                 (API.Field("offset", int), False, 0),)
+    HANDLE_FMT = "{series_id}"
 
 
 class Release(API.Resource):
     VARIABLE = ((API.Field("release_id", str), True, API.NO_DEFAULT),
                 (API.Field("offset", int), False, 0),)
+    HANDLE_FMT = "{release_id}"
 
 
 async def format(request: API.Request, response: ClientResponse, index: str) -> API.Response:

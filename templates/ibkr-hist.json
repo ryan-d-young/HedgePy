@@ -7,6 +7,6 @@
         "resolution": "PT1H"
     },
     "templates": [
-        {"resource": {"class": "Cash", "symbol": "EUR", "currency": "USD", "exchange": "IDEALPRO"}}
+        {"resource": {"class": "Cash", "handle": "EUR_USD"}}
     ]
 }
