@@ -53,7 +53,7 @@ async def main():
     app = await make_session(vendor_spec)
     
     request = vendor_spec.request(
-        endpoint, API.RequestParams(symbol=args.y, start=args.s, end=args.e, resolution=args.r))
+        endpoint, API.RequestParams(resource=args.y, start=args.s, end=args.e, resolution=args.r))
 
     raw_response = await get(app, request)
     data = await raw_response.json()

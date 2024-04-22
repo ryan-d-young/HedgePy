@@ -1,7 +1,8 @@
 from hedgepy.common.bases import API
 from hedgepy.common.vendors.ibkr.ibkr import (
     construct_app, run_app, corr_id, get_account_summary, get_contract_details, 
-    get_historical_bars, get_historical_ticks, get_realtime_ticks, get_realtime_bars)
+    get_historical_bars, get_historical_ticks, get_realtime_ticks, get_realtime_bars, 
+    Stock, Bond, Commodity, Cash, Index, CFD, Crypto, Future, ContinuousFuture, Option, FutureOption)
 
 
 context = API.Context(
@@ -12,7 +13,7 @@ context = API.Context(
         "TFMT": "%H:%M:%S",
     }, 
     derived_vars={
-        "DTFMT": lambda self: " ".join((self.DFMT, self.TFMT)),
+        "DTFMT": lambda self: " ".join((self["DFMT"], self["TFMT"])),
     }
 )
 
@@ -45,5 +46,6 @@ spec = API.VendorSpec(
         "realtime_ticks": API.Getter(get_realtime_ticks)
     },
     context=context, 
-    corr_id_fn=corr_id
+    corr_id_fn=corr_id, 
+    resources=(Stock, Bond, Commodity, Cash, Index, CFD, Crypto, Future, ContinuousFuture, Option, FutureOption)
 )

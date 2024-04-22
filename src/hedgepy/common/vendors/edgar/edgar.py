@@ -1,6 +1,18 @@
 from hedgepy.common.bases import API
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientResponse
 from typing import Awaitable
+
+
+def _last_period():
+    from datetime import datetime
+    from math import ceil
+
+    year, month = datetime.now().strftime("%Y-%m").split("-")
+    return (
+        f"CY{int(year) - 1}Q4I"
+        if int(month) - 3 < 0
+        else f"CY{int(year)}Q{ceil(4 * (int(month)/12))}I"
+    )
 
 
 def _sanitize_cik(cik: int | str) -> str:
@@ -9,37 +21,59 @@ def _sanitize_cik(cik: int | str) -> str:
     return cik
 
 
-def format_tickers(response: API.Response) -> API.Response:
+class Submission(API.Resource):
+    VARIABLE = ((API.Field("cik", str), True, API.NO_DEFAULT),)
+    
+
+class Concept(API.Resource):
+    VARIABLE = ((API.Field("cik", str), True, API.NO_DEFAULT),
+                (API.Field("tag", str), True, API.NO_DEFAULT),)
+
+
+class Frame(API.Resource):
+    VARIABLE = ((API.Field("tag", str), True, API.NO_DEFAULT),
+                (API.Field("period", str), True, _last_period()),)
+    
+    
+class Facts(API.Resource):
+    VARIABLE = ((API.Field("cik", str), True, API.NO_DEFAULT),)
+
+
+async def format_tickers(request: API.Request, response: ClientResponse) -> API.Response:
+    async with response:
+        data = await response.json()
     formatted_data = tuple()
-    for record in response.data.values():
+    for record in data.values():
         formatted_data += ((_sanitize_cik(record["cik_str"]), record["ticker"]),)
-    return API.Response(data=formatted_data, request=response.request)
+    return API.Response(data=formatted_data, request=request)
 
 
 @API.register_getter(formatter=format_tickers, returns=(("cik", str), ("ticker", str)))
 def get_tickers(
     app: ClientSession, params: API.RequestParams, context: API.Context
-) -> Awaitable[API.Response]:
+) -> ClientResponse:
     return app.get(url="https://sec.gov/files/company_tickers.json")
 
 
-def format_submissions(response: API.Response) -> API.Response:
-    raw_data: dict = response.data["filings"]["recent"]
+async def format_submissions(request: API.Request, response: ClientResponse) -> API.Response:
+    async with response:
+        data = await response.json()
+        data = data["filings"]["recent"]
     formatted_data = tuple()
-    for ix in range(len(raw_data["form"])):
+    for ix in range(len(data["form"])):
         formatted_data += (
             (
-                raw_data["form"][ix],
-                raw_data["accessionNumber"][ix],
-                raw_data["filingDate"][ix],
-                raw_data["reportDate"][ix],
-                raw_data["fileNumber"][ix],
-                raw_data["filmNumber"][ix],
-                raw_data["primaryDocument"][ix],
-                bool(raw_data["isXBRL"][ix]),
+                data["form"][ix],
+                data["accessionNumber"][ix],
+                data["filingDate"][ix],
+                data["reportDate"][ix],
+                data["fileNumber"][ix],
+                data["filmNumber"][ix],
+                data["primaryDocument"][ix],
+                bool(data["isXBRL"][ix]),
             ),
         )
-    return API.Response(data=formatted_data, request=response.request)
+    return API.Response(data=formatted_data, request=request)
 
 
 @API.register_getter(
@@ -57,15 +91,19 @@ def format_submissions(response: API.Response) -> API.Response:
 )
 def get_submissions(
     app: ClientSession, params: API.RequestParams, context: API.Context
-) -> Awaitable[API.Response]:
-    return app.get(url=f"https://data.sec.gov/submissions/CIK{params.symbol}.json")
+) -> ClientResponse:
+    submission = params.resource
+    cik = _sanitize_cik(submission.cik)
+    return app.get(url=f"https://data.sec.gov/submissions/CIK{cik}.json")
 
 
-def format_concept(response: API.Response) -> API.Response:
-    raw_data: dict = response.data["units"]
+async def format_concept(request: API.Request, response: ClientResponse) -> API.Response:
+    async with response:
+        data = await response.json()
+        data = data["units"]
     formatted_data = tuple()
-    for unit in raw_data:
-        for record in raw_data[unit]:
+    for unit in data:
+        for record in data[unit]:
             formatted_data += (
                 (
                     unit,
@@ -76,8 +114,7 @@ def format_concept(response: API.Response) -> API.Response:
                     record["accn"],
                 ),
             )
-
-    return API.Response(data=formatted_data, request=response.request)
+    return API.Response(data=formatted_data, request=request)
 
 
 @API.register_getter(
@@ -94,18 +131,21 @@ def format_concept(response: API.Response) -> API.Response:
 def get_concept(
     app: ClientSession, params: API.RequestParams, context: API.Context
 ) -> Awaitable[API.Response]:
-    cik, tag = params.symbol
+    concept = params.resource
+    cik = _sanitize_cik(concept.cik)
     return app.get(
-        url=f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}/us-gaap/{tag}.json"
+        url=f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}/us-gaap/{concept.tag}.json"
     )
 
 
-def format_facts(response: API.Response):
-    raw_data = response.data["facts"]
+async def format_facts(request: API.Request, response: ClientResponse):
+    async with response:
+        data = await response.json()
+        data = data["facts"]
     formatted_data = tuple()
-    for taxonomy in raw_data:
-        for line_item in raw_data[taxonomy]:
-            facts = raw_data[taxonomy][line_item]
+    for taxonomy in data:
+        for line_item in data[taxonomy]:
+            facts = data[taxonomy][line_item]
             units = facts["units"]
             for unit, records in units.items():
                 for record in records:
@@ -124,7 +164,7 @@ def format_facts(response: API.Response):
                             record["filed"],
                         ),
                     )
-    return API.Response(data=formatted_data, request=response.request)
+    return API.Response(data=formatted_data, request=request)
 
 
 @API.register_getter(
@@ -146,22 +186,26 @@ def format_facts(response: API.Response):
 def get_facts(
     app: ClientSession, params: API.RequestParams, context: API.Context
 ) -> Awaitable[API.Response]:
+    facts = params.resource
+    cik = _sanitize_cik(facts.cik)
     return app.get(
-        url=f"https://data.sec.gov/api/xbrl/companyfacts/CIK{params.symbol}.json"
+        url=f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
     )
 
 
-def format_frame(response: API.Response) -> API.Response:
+async def format_frame(request: API.Request, response: ClientResponse) -> API.Response:
+    async with response:
+        data = await response.json()
     formatted_data = tuple()
-    for record in response.data["data"]:
+    for record in data["data"]:
         formatted_data += (
             (
-                response.data["taxonomy"],
-                response.data["tag"],
-                response.data["ccp"],
-                response.data["uom"],
-                response.data["label"],
-                response.data["description"],
+                data["taxonomy"],
+                data["tag"],
+                data["ccp"],
+                data["uom"],
+                data["label"],
+                data["description"],
                 record["accn"],
                 record["cik"],
                 record["entityName"],
@@ -170,19 +214,7 @@ def format_frame(response: API.Response) -> API.Response:
                 record["val"],
             ),
         )
-    return API.Response(data=formatted_data, request=response.request)
-
-
-def _last_period():
-    from datetime import datetime
-    from math import ceil
-
-    year, month = datetime.now().strftime("%Y-%m").split("-")
-    return (
-        f"CY{int(year) - 1}Q4I"
-        if int(month) - 3 < 0
-        else f"CY{int(year)}Q{ceil(4 * (int(month)/12))}I"
-    )
+    return API.Response(data=formatted_data, request=request)
 
 
 @API.register_getter(
@@ -205,8 +237,7 @@ def _last_period():
 def get_frame(
     app: ClientSession, params: API.RequestParams, context: API.Context
 ) -> Awaitable[API.Response]:
-    tag, period = params.symbol.split()
-    period = period if period else _last_period()
+    frame = params.resource
     return app.get(
-        url=f"https://data.sec.gov/api/xbrl/frames/us-gaap/{tag}/usd/{period}.json"
+        url=f"https://data.sec.gov/api/xbrl/frames/us-gaap/{frame.tag}/usd/{frame.period}.json"
     )

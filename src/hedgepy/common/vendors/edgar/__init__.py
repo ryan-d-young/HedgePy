@@ -10,8 +10,8 @@ context = API.Context(
         "TFMT": "%H:%M:%S"
         },
     derived_vars={
-        "user_agent": lambda self: f"{self.company.value} {self.email.value}", 
-        "DTFMT": lambda self: " ".join((self.DFMT, self.TFMT))
+        "user_agent": lambda self: f"{self["company"].value} {self["email"].value}", 
+        "DTFMT": lambda self: " ".join((self["DFMT"], self["TFMT"]))
         }
 )
 
@@ -29,7 +29,7 @@ spec = API.VendorSpec(
         headers={
             "Accept": "application/json",
             "Accept-Encoding": "gzip, deflate",
-            "User-Agent": context.user_agent,
+            "User-Agent": context["user_agent"],
         }
     ),
 )

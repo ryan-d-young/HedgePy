@@ -1,28 +1,30 @@
 {
     "definitions": {
-        "string": {"type": "string"},
-        "date": {"format": "datetime", "type": "string"},
-        "duration": {"format": "duration", "type": "string"},
-        "string_array": {"type": "array", "items": {"type": "string"}},
-        "orientation": {"type": "string", "enum": ["wide", "long"], "default": "wide"},
+        "resource": {
+            "type": "object",
+            "properties": {
+                "class": {"type": "string"}
+            }, 
+            "required": ["class"], 
+            "additionalProperties": true
+        },
         "template": {
             "type": "object", 
             "properties": {
-                "vendor": {"$ref": "#/definitions/string"}, 
-                "endpoint": {"$ref": "#/definitions/string"},
-                "start": {"$ref": "#/definitions/date"},
-                "end": {"$ref": "#/definitions/date"},
-                "resolution": {"$ref": "#/definitions/duration"},
-                "orientation": {"$ref": "#/definitions/orientation"},
-                "symbol": {"$ref": "#/definitions/string"},
-                "field": {"$ref": "#/definitions/string_array"}
-            }
-        }, 
-        "template_array": {"type": "array", "items": {"$ref": "#/definitions/template"}}
+                "vendor": {"type": "string"}, 
+                "endpoint": {"type": "string"},
+                "start": {"format": "datetime", "type": "string"},
+                "end": {"format": "datetime", "type": "string"},
+                "resolution": {"format": "duration", "type": "string"},
+                "resource": {"$ref": "#/definitions/resource"},
+                "field": {"type": "array", "items": {"type": "string"}}
+            }, 
+            "additionalProperties": false
+        }
     }, 
     "type": "object",
     "properties": {
         "common": {"$ref": "#/definitions/template"},
-        "templates": {"$ref": "#/definitions/template_array"}
+        "templates": {"type": "array", "items": {"$ref": "#/definitions/template"}}
     }
 }

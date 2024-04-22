@@ -129,7 +129,7 @@ def dt_to_str(dt: datetime | None, fmt: str = DTFMT) -> str:
 
 def format(start: str | None, end: str | None) -> tuple[datetime, datetime]:
     return str_to_dt(start), str_to_dt(end)
-    
+
     
 def now() -> time:
     return timelib.time()

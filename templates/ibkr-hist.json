@@ -3,10 +3,10 @@
     "common": {
         "vendor": "ibkr",
         "endpoint": "historical_bars",
-        "start": "2000-01-01T00:00:00",
+        "start": "2024-01-01T00:00:00",
         "resolution": "PT1H"
     },
     "templates": [
-        {"symbol": "CASH.EUR.USD.IDEALPRO"}
+        {"resource": {"class": "Cash", "symbol": "EUR", "currency": "USD", "exchange": "IDEALPRO"}}
     ]
 }

@@ -10,8 +10,8 @@ context = API.Context(
         "TFMT": "%H:%M:%S-05"
         },
     derived_vars={
-        "http_params": lambda self: {"api_key": self.key.value, "file_type": self.file_type}, 
-        "DTFMT": lambda self: " ".join((self.DFMT, self.TFMT))
+        "http_params": lambda self: {"api_key": self["key"].value, "file_type": self["file_type"]}, 
+        "DTFMT": lambda self: " ".join((self["DFMT"], self["TFMT"]))
         }
 )
 

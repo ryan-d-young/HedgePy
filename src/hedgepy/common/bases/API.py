@@ -6,7 +6,7 @@ from itertools import chain
 from typing import Any, Callable, Awaitable, Self, Generator
 from dataclasses import dataclass, asdict
 from uuid import uuid4, UUID
-from collections import UserString, deque
+from collections import UserDict, namedtuple, deque
 from pathlib import Path
 from importlib import import_module
 
@@ -18,17 +18,20 @@ from hedgepy.common.utils import config, dtwrapper, logger
 
 LOGGER = logger.get(__name__)
 
+NO_DEFAULT = object()
 
 App = Any | ClientSession
 AppConstructor = Callable[["Context"], "App"]
 AppRunner = Callable[["App"], Awaitable]
 CorrID = str | int | UUID
 CorrIDFn = Callable[["App"], CorrID]
-Target = Callable[["App", "Request", "Context"], Awaitable["Response"]]
-Getters = dict[str, Target | "RateLimitedGetter"]
+Target = Callable[["App", "Request", "Context"], Awaitable["Response"] | "Response"]
+Getters = dict[str, "Getter"]
 Formatter = Callable[["Response"], "Response"]
-Field = tuple[str, type]
+Field = namedtuple("Field", ["name", "dtype"])
 Fields = tuple[Field]
+Parameter = tuple[Field, bool, Any]
+Parameters = tuple[Parameter]
 
 
 @dataclass
@@ -43,32 +46,71 @@ class EnvironmentVariable:
         return self._value
 
 
-class Context:
+class _ImmutableDict(UserDict):
+    def __init__(self, **kwargs):
+        super().__init__(kwargs)
+        self._name = self.__class__.__name__
+        self._mod = self.__module__
+        self.__setitem__ = self._immutable
+        self.__delitem__ = self._immutable
+
+    @staticmethod
+    def _immutable(*args, **kwargs):
+        raise AttributeError("Resource is immutable")
+    
+    @property
+    def name(self) -> str:
+        return self._name
+    
+    @property
+    def qualname(self) -> str:
+        return f"{self._mod}.{self._name}"
+
+
+class Context(_ImmutableDict):
     def __init__(
         self, 
         static_vars: dict[str, str | int | float] | None = None, 
         derived_vars: dict[str, Callable[[Self], str | int | float]] | None = None
         ):
-        if static_vars: 
-            for key, value in static_vars.items():
-                setattr(self, key, value)
+        di = static_vars if static_vars else {}
+        super().__init__(**di)
+        if derived_vars:
+            for key, value in derived_vars.items():
+                if callable(value):
+                    self[key] = value(self)
+                else: 
+                    raise ValueError(f"Derived variable {key} must be a callable that takes self as an argument")        
 
-            if derived_vars:
-                for key, value in derived_vars.items():
-                    if callable(value):
-                        setattr(self, key, value(self))
-                    else: 
-                        raise ValueError(f"Derived variable {key} must be a callable that takes self as an argument")
-                    
-        elif derived_vars:
-            raise ValueError("Derived variables require static variables")
 
-        self.__setattr__ = self._immutable
-        self.__delattr__ = self._immutable
-                    
-    @staticmethod
-    def _immutable(*args, **kwargs):
-        raise AttributeError("Context is immutable")
+class Resource(_ImmutableDict):
+    CONSTANT: Parameters = ()
+    VARIABLE: Parameters = ()
+    
+    def __init__(self, **kwargs: dict[str, Any]):
+        di = {}
+        
+        for field, required, default in chain(self.CONSTANT, self.VARIABLE):
+            if field.name in kwargs:
+                arg_value = kwargs.pop(field.name)
+            elif required:
+                if default is NO_DEFAULT:
+                    raise ValueError(f"Missing required argument {field.name}")
+                else:
+                    arg_value = default
+
+            if isinstance(arg_value, field.dtype):
+                di[field.name] = arg_value
+            else:
+                try:
+                    di[field.name] = field.dtype(arg_value)
+                except ValueError:
+                    raise ValueError(f"Invalid type for argument {field.name}")
+
+        if len(kwargs) > 0:
+            raise ValueError(f"Invalid keyword argument(s) provided {kwargs}")
+            
+        super().__init__(**di)
 
 
 @dataclass
@@ -76,45 +118,23 @@ class RequestParams:
     start: dtwrapper.datetime | None = None
     end: dtwrapper.datetime | None = None
     resolution: dtwrapper.timedelta | None = None
-    symbol: str | None = None
+    resource: Resource | None = None
 
-    def __post_init__(self):
-        for attr in ("start", "end"):
-            if getattr(self, attr) and not isinstance(getattr(self, attr), dtwrapper.datetime):
-                try:
-                    setattr(self, attr, dtwrapper.str_to_dt(getattr(self, attr)))
-                except ValueError:
-                    raise ValueError(f"Invalid datetime format for {attr}")
-        if isinstance(self.resolution, str):
-            try:
-                self.resolution = dtwrapper.str_to_td(self.resolution)
-            except ValueError:
-                raise ValueError(f"Invalid timedelta format for {self.resolution}")
-        self._kwargs = {k: v for k, v in asdict(self).items() if v is not None}
-        
-    @property
-    def kwargs(self) -> dict:
-        return self._kwargs
-    
-    @classmethod
-    def from_js(cls, js: dict) -> Self:
-        dtwrapper.UDt.select_fmt()
-        if js.get("start"):
-            js["start"] = dtwrapper.UDt.convert(js["start"])
-        if js.get("end"):
-            js["end"] = dtwrapper.UDt.convert(js["end"])
-        if js.get("resolution"):
-            js["resolution"] = dtwrapper.UDur.convert(js["resolution"])
-        return cls(**js)
-    
-    def to_js(self) -> dict:
-        dtwrapper.UDt.select_fmt()
+    def encode(self) -> dict:
         return {
-            "start": dtwrapper.UDt.convert(self.start),
-            "end": dtwrapper.UDt.convert(self.end),
-            "resolution": dtwrapper.UDur.convert(self.resolution),
-            "symbol": self.symbol
+            "start": dtwrapper.dt_to_str(self.start),
+            "end": dtwrapper.dt_to_str(self.end),
+            "resolution": dtwrapper.td_to_str(self.resolution),
+            "resource": self.resource
         }
+        
+    @classmethod
+    def decode(cls, js: dict) -> Self:
+        return cls(
+            start=dtwrapper.str_to_dt(js.get("start", None)), 
+            end=dtwrapper.str_to_dt(js.get("end", None)),
+            resolution=dtwrapper.str_to_td(js.get("resolution", None)),
+            resource=js.get("resource", None))
 
 
 @dataclass
@@ -129,32 +149,33 @@ class Request:
         self.vendor = vendor
         self.endpoint = endpoint
         self.params = params
-        self.corr_id = corr_id  # corr_id is only set server-side
+        self.corr_id = corr_id  # corr_id is set server-side
 
-    def to_js(self):
+    def encode(self) -> dict:
         return {
             "vendor": self.vendor,
             "endpoint": self.endpoint,
-            "params": self.params.to_js(),
-            }  # to_js is only called client-side, so corr_id is not included
-
+            "params": self.params.encode(), 
+            "corr_id": self.corr_id
+        }
+        
     @classmethod
-    def from_js(cls, js: dict, corr_id: CorrID | None = None) -> Self:  # from_js is only called server-side
-        params = js.pop("params", {})
-        return cls(**js, corr_id=corr_id, params=RequestParams.from_js(params))
+    def decode(cls, js: dict) -> Self:
+        return cls(
+            vendor=js.get("vendor", None), 
+            endpoint=js.get("endpoint", None), 
+            params=RequestParams.decode(js.get("params", {})), 
+            corr_id=js.get("corr_id", None)
+        )
     
     @classmethod
-    def from_template(cls, common: dict, template: dict) -> Self:
-        request_js, params_js = {}, {}
-        for k, v in chain(common.items(), template.items()):
-            if k in ("start", "end", "resolution", "symbol"):
-                params_js[k] = v
-            elif k in ("vendor", "endpoint"):
-                request_js[k] = v
-            else: 
-                raise ValueError(f"Invalid request parameter {k}={v}")
-        request_js["params"] = params_js
-        return cls.from_js(request_js)
+    def from_template(cls, common: dict, request: dict) -> Self:
+        merged = {**common, **request}
+        return cls(
+            vendor=merged.pop("vendor"), 
+            endpoint=merged.pop("endpoint"), 
+            params=RequestParams.decode(merged)
+            )
 
 
 @dataclass
@@ -162,33 +183,20 @@ class Response:
     request: Request
     data: tuple[tuple[Any]] | None = None
     
-    def to_js(self):
+    def js(self):
         return {
-            "request": self.request.to_js(),
+            "request": self.request.js(),
             "data": self.data
             }
         
     @classmethod
     def from_js(cls, js: dict) -> Self:
         request_js = js.pop("request")
-        corr_id = request_js.pop("corr_id")
-        request = Request.from_js(request_js, corr_id)
+        request = Request.from_js(request_js)
         return cls(request=request, **js)
 
 
 def register_getter(returns: Fields, streams: bool = False, formatter: Formatter | None = None) -> Target:
-    """
-    Decorator function to register an API endpoint.
-
-    Args:
-        returns (Fields): Field names and their corresponding types.
-        streams (bool): Indicates if the endpoint streams. Defaults to False.
-        formatter (Formatter, optional): A function to format the response. Defaults to None.
-
-    Returns:
-        Getter: The decorated function.
-
-    """
     def decorator(getter: Target) -> Target:
         @wraps(getter)
         def wrapper(app: Any, params: RequestParams, *args, **kwargs) -> Awaitable[Response]:
@@ -261,7 +269,6 @@ class RateLimiter(Getter):
         try:
             elapsed = time - self.history.popleft()
         except IndexError:  # history is empty
-            
             elapsed = self.interval
         if elapsed < self.interval:
             sleep_time = self.interval - elapsed
@@ -281,9 +288,14 @@ class TimeChunker(Getter):
             map(dtwrapper.str_to_td, chunk_schedule.values())))
         self._corr_id_fn = corr_id_fn
         
+    def _merge(self, request: Request, responses: dict[CorrID, Response]) -> Response:
+        data = tuple(chain.from_iterable((response.data for response in responses.values())))
+        return Response(request=request, data=data)
+        
     async def _chunk(self, app: App, request: Request, context: Context, 
-                     n_chunks: int, max_duration: dtwrapper.timedelta) -> dict[CorrID, Response]:
-        responses = {}        
+                     n_chunks: int, max_duration: dtwrapper.timedelta) -> Response:
+        responses = {}
+        original_request = request
 
         corr_id, request_start = request.corr_id, request.params.start
         request_end = request_start + max_duration
@@ -297,7 +309,7 @@ class TimeChunker(Getter):
                     start=request_start, 
                     end=request_end, 
                     resolution=request.params.resolution, 
-                    symbol=request.params.symbol)
+                    resource=request.params.resource)
                 )
             
             responses[request.corr_id] = await self.target.__call__(app, request, context)
@@ -314,27 +326,28 @@ class TimeChunker(Getter):
                 start=request_end + request.params.resolution, 
                 end=request.params.end, 
                 resolution=request.params.resolution, 
-                symbol=request.params.symbol)
+                resource=request.params.resource)
             )
         
         responses[stub_request.corr_id] = await self.target.__call__(app, stub_request, context)
-        return responses
+        response = self._merge(request=original_request, responses=responses)
+        return response
     
     async def __call__(self, app: App, request: Request, context: Context) -> Response:
         request_end = request.params.end if request.params.end else dtwrapper.timestamp()
         request_duration = request_end - request.params.start
-        responses = None
+        response = None
 
         for resolution, max_duration in self.chunk_schedule.items():
             if request.params.resolution <= resolution:                
                 if (n_chunks := request_duration // max_duration) > 1:
                     LOGGER.info(f"Chunking {request.vendor} {request.endpoint} into {n_chunks} chunks")
-                    responses = await self._chunk(app, request, context, n_chunks, max_duration)
+                    response = await self._chunk(app, request, context, n_chunks, max_duration)
 
-        if not responses:  # the first if statement never evaluated to True; no chunking required
-            responses = await self.target.__call__(app, request, context)
+        if not response:  # the first if statement never evaluated to True; no chunking required
+            response = await self.target.__call__(app, request, context)
 
-        return responses
+        return response
            
 
 @dataclass
@@ -344,6 +357,7 @@ class VendorSpec:
     app_runner: AppRunner | None = None
     context: Context | None = None
     corr_id_fn: CorrIDFn | None = None
+    resources: tuple[Resource] | None = None
 
     def __post_init__(self):
         self.name = self.__module__.split(".")[-2]
@@ -357,12 +371,14 @@ class Vendor:
         getters: Getters,
         runner: AppRunner | None = None,
         corr_id_fn: CorrIDFn | None = None,
+        resources: tuple[Resource] | None = None
     ):
         self.app = app
         self.context = context
         self.getters = getters
         self.runner = runner
         self.corr_id_fn = corr_id_fn if corr_id_fn else uuid4
+        self.resources = resources
         
     def __getitem__(self, endpoint: str) -> Target:
         return self.getters[endpoint]
@@ -377,7 +393,7 @@ class Vendor:
                 )
         else: 
             app = spec.app_constructor(spec.context)
-        return cls(app, spec.context, spec.getters, spec.app_runner, spec.corr_id_fn)
+        return cls(app, spec.context, spec.getters, spec.app_runner, spec.corr_id_fn, spec.resources)
 
     def request(self, endpoint: str, params: RequestParams) -> Request:
         if endpoint in self.getters:
@@ -393,38 +409,3 @@ class Vendor:
         
     def response(self, request: Request, data: Any) -> Response:
         return Response.from_request(request, data)
-
-
-class Vendors:
-    def __init__(self):
-        self._vendors = self.load_vendors(root=config.SOURCE_ROOT)
-        
-    @property
-    def vendors(self):
-        return self._vendors
-
-    @staticmethod
-    def load_vendors(root: str):
-        vendors = {}
-        for vendor in (Path(root) / 'common' / 'vendors').iterdir():
-            mod = import_module(f"hedgepy.common.vendors.{vendor.stem}")
-            vendors[vendor.stem] = Vendor.from_spec(mod.spec)
-            if hasattr(mod.spec.context, "DTFMT"):
-                dtwrapper.UDt.register_fmt(vendor.stem, mod.spec.context.DTFMT)
-        return vendors
-
-    async def stop_vendors(self):
-        for vendor in self._vendors.values():
-            if hasattr(vendor, "stop"):  # ClientSession does not have a stop method
-                if asyncio.iscoroutine(vendor.stop):
-                    await vendor.stop()
-                else:
-                    vendor.stop()
-
-    def start_vendors(self) -> tuple[Awaitable]:
-        tasks = []
-        for vendor in self._vendors.values():
-            if vendor.runner:
-                tasks.append(vendor.runner(vendor.app))
-        return tuple(tasks)  # to be awaited via asyncio.gather(*tasks)
-    

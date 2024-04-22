@@ -15,6 +15,7 @@ followed by calling App.start(). Requests made via App.put(request), and respons
 import asyncio
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, Generator, Any
+from collections import defaultdict
 
 from ibapi import comm
 from ibapi.wrapper import EWrapper
@@ -26,6 +27,10 @@ from ibapi.server_versions import MIN_CLIENT_VER, MAX_CLIENT_VER
 from ibapi.message import OUT
 
 from hedgepy.common.bases import API
+from hedgepy.common.utils import logger
+
+
+LOGGER = logger.get(__name__)
 
 
 class Connection: 
@@ -67,15 +72,21 @@ class Connection:
 
     async def transfer(self) -> bool:
         try: 
-            self.buffer += await asyncio.wait_for(
-                self._reader.readuntil(Connection.MSG_SEP),
-                timeout=1)  # NB: EClient's timeout is 0.2
+            data = await self._reader.read(4096)
+            if data: 
+                self.buffer += data
+#                LOGGER.debug(f"Data received: {data}")
+                return True
+            else:
+#                LOGGER.debug("No data received.")
+                return False
         except asyncio.IncompleteReadError as e:
+#            LOGGER.debug(f"Partial data received: {e.partial}")
             self.buffer += e.partial
-        except asyncio.TimeoutError:
             return False
-        else: 
-            return True
+        except asyncio.TimeoutError:
+#            LOGGER.debug("Timeout error.")
+            return False
     
     async def transfer_all(self) -> AsyncGenerator[int, None]:
         while await (n := self.transfer()) > 0:
@@ -109,7 +120,7 @@ class BaseClient(EWrapper, EClient):
     MAX_RETRIES = 100
     MIN_MSG_LEN = 4
 
-    def __init__(self, connection: Connection, client_id: int = 100):
+    def __init__(self, connection: Connection, app: "App", client_id: int = 100):
         super(EWrapper).__init__()
         EClient.__init__(self, wrapper=self)
         self.reset()  # EClient.reset()
@@ -122,12 +133,8 @@ class BaseClient(EWrapper, EClient):
         
         # Internal attrs
         self._started = False
-        self._response_queue = asyncio.Queue()   
-        
-    @property
-    def response_queue(self) -> asyncio.Queue:
-        return self._response_queue     
-        
+        self._app = app
+
     async def handshake(self, retry: int = 0):
         """Part of the connection process -- never called outside of connect() method.
         
@@ -195,7 +202,7 @@ class BaseClient(EWrapper, EClient):
         self.wrapper.connectionClosed()
         self.reset()
         
-    async def recv(self) -> None:
+    async def recv(self):
         """Receives a message from IBKR and processes it. Messages are passed to the wrapper; wrapper methods
         append the response to the response queue for upstream processing.
 
@@ -206,8 +213,7 @@ class BaseClient(EWrapper, EClient):
             msg: bytes = self.conn.read()
             fields: tuple[Any] = comm.read_fields(msg)
             self.decoder.interpret(fields)
-            await self._response_queue.put(fields)
-
+            return True
 
 class Client(BaseClient, ABC):
     """ABC to implement specific functions for API interaction."""
@@ -468,58 +474,56 @@ class Client(BaseClient, ABC):
 
 
 class App:
-    PERIOD_MS = 50
+    CYCLE_MS = 50
+    CYCLES_PER_SEC = 1e3 / CYCLE_MS
     WAITING = object()
     
     def __init__(self, host: str, port: int, client_impl: Client):
         self.connection = Connection(host, port)
         self.client = None
-        self.responses: dict[int, API.Response] = {}
-        self._lock = asyncio.Lock()
+        self.responses: defaultdict[int, list[tuple]] = defaultdict(list)
         self._client_impl = client_impl
         self._running = False
-        
+
     def request_id(self) -> int:
         return self.client.conn.next_request_id()
 
     async def _ainit(self):
-        self.client = self._client_impl(self.connection)
+        self.client = self._client_impl(connection=self.connection, app=self)
         await self.client.connect()
-    
-    async def _cycle(self):
-        try: 
-            await self.client.recv()
-            response = self.client.response_queue.get_nowait()
-        except asyncio.QueueEmpty:
-            await asyncio.sleep(0)
-        else:
-            if isinstance(response, tuple) and len(response) > 1:
-                request_id, *fields = response
-                async with self._lock:
-                    try: 
-                        self.responses[request_id] += ((fields),)
-                    except KeyError:
-                        self.responses[request_id]  = ((fields),)
 
-    async def get(self, request_id: int) -> API.Response | None | object:
-        async with self._lock:
-            data = self.responses.get(request_id, App.WAITING)
-            self.responses[request_id] = tuple()
-        return data
+    async def wait_for(self, request_id: int) -> tuple:
+        while len(response := self.responses.pop(request_id, [])) == 0:
+            await asyncio.sleep(self.CYCLES_PER_SEC*(self.CYCLE_MS/1e3))
+            LOGGER.debug(f"Waiting for response ({request_id})...")
+        return response        
+
+    async def get(self, request_id: int) -> tuple:
+        if len(response := self.responses.pop(request_id, [])) == 0:
+            response = await self.wait_for(request_id)    
+        LOGGER.debug(f"Received response ({request_id}).")
+        return response
+    
+    def put(self, request_id: int, response: tuple):
+        LOGGER.debug(f"Putting response {response} for request ID {request_id}")
+        self.responses[request_id].append(response)
     
     async def run(self):
         while self._running:
             try: 
-                await self._cycle()
+                if await self.client.recv():
+                    LOGGER.debug("Received message.")
             except KeyboardInterrupt:
                 await self.stop()
+            except Exception as e:
+                LOGGER.error(f"Error: {e}")
             finally: 
-                await asyncio.sleep(self.PERIOD_MS/1e3)
+                await asyncio.sleep(self.CYCLE_MS/1e3)
             
     async def start(self):
         self._running = True
         await self.run()
         
     def stop(self):
-        self._running = False
+        self._running = False 
     

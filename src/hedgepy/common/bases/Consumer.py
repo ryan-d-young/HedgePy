@@ -15,7 +15,7 @@ class BaseConsumer:
         self.pending: dict[UUID, float] = {}
     
     async def post(self, request: API.Request) -> UUID:
-        async with self._session.post(self._url, json=request.to_js()) as response:
+        async with self._session.post(self._url, json=request.encode()) as response:
             try: 
                 resp = await response.json()
                 return resp['corr_id']
