@@ -1,12 +1,8 @@
 {
     "definitions": {
         "resource": {
-            "type": "object",
-            "properties": {
-                "class": {"type": "string"}
-            }, 
-            "required": ["class"], 
-            "additionalProperties": true
+            "type": "string",
+            "pattern": "^([^$]+)\\$([^_]+(?:_[^_]+)*)$"
         },
         "template": {
             "type": "object", 

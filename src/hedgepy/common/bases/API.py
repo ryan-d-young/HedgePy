@@ -63,8 +63,12 @@ class _ImmutableDict(UserDict):
         return self._name
     
     @property
+    def mod(self) -> str:
+        return self._mod
+    
+    @property
     def qualname(self) -> str:
-        return f"{self._mod}.{self._name}"
+        return f"{self.mod}.{self.name}"
 
 
 class Context(_ImmutableDict):
@@ -112,9 +116,13 @@ class Resource(_ImmutableDict):
             raise ValueError(f"Invalid keyword argument(s) provided {kwargs}")
             
         super().__init__(**di)
+
+    @property
+    def handle(self) -> str:
+        return self.HANDLE_FMT.format(**self)
         
     def encode(self) -> str:
-        return "_".join((self.qualname, self.HANDLE_FMT.format(**self)))
+        return "$".join((self.name, self.handle))
     
     @classmethod
     def decode(cls, handle: str) -> Self:

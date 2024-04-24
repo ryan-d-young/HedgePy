@@ -26,6 +26,23 @@ class Schedule:
     @property
     def cycles(self):
         return (self.stop - self.start) // self.interval
+    
+    def struct(self, vendors: dict[str, API.Vendor]):
+        di = {vendor: {} for vendor in vendors.keys()}
+        for item in self.items:
+            if (long_handle := item.request.params.resource.encode()) not in di[item.request.vendor]:
+                di[item.request.vendor][long_handle] = []
+            endpoint_name = item.request.endpoint
+            endpoint = vendors[item.request.vendor].getters[endpoint_name]
+            fields = endpoint.returns
+            field_names = list(zip(*fields))[0]
+            di[item.request.vendor][long_handle].append({
+                "fields": field_names,
+                "endpoint": endpoint_name,
+                "date_range": (item.request.params.start, item.request.params.end),
+                "resolution": item.request.params.resolution
+            })
+        return di
 
 
 class Daemon(Consumer.BaseConsumer):

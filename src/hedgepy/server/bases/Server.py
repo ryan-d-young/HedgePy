@@ -128,6 +128,7 @@ class BaseServer(LogicMixin, VendorMixin, ABC):
                 case _:
                     return web.Response(status=405)
         except Exception as e:  # TODO: error handling
+            LOGGER.error(f"Error handling request: {e}")
             return web.Response(status=500, text=str(e))
 
 
@@ -161,6 +162,9 @@ class Server(BaseServer):
             self.stop_loop()
             )
         
+    def status(self) -> tuple[int, int]:
+        return self.requests.qsize(), len(self.responses)
+        
     async def cycle(self):
         try: 
             request: API.Request = self._request_queue.get_nowait()
@@ -188,6 +192,8 @@ class Server(BaseServer):
         LOGGER.debug(f"Received GET request {request}")
         
         request_js = await request.json()
+        LOGGER.info(f"\tcontent: {request_js}")
+        
         corr_id = request_js.get("corr_id", None)
         
         if corr_id:
@@ -197,10 +203,7 @@ class Server(BaseServer):
             else:
                 return web.Response(status=404)
         else:
-            return web.json_response({
-                "pending_requests": self.requests.qsize(), 
-                "pending_responses": len(self.responses)
-                })
+            return web.json_response(self.status())
             
     async def _handle_post(self, request: web.BaseRequest) -> web.Response:
         LOGGER.debug(f"Received POST request {request}")
@@ -210,7 +213,7 @@ class Server(BaseServer):
         corr_id = vendor.corr_id_fn(vendor.app)   
         request_js['corr_id'] = corr_id
 
-        if resource_handle := request_js['params'].pop('resource', None):
+        if resource_handle := request_js['params'].pop('resource', None):           
             qualname, *field_values = resource_handle.split("_")
             *_, vendor, cls_name = qualname.split(".")
             cls = self.vendors[vendor].resources[cls_name]

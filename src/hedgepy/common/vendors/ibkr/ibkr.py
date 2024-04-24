@@ -237,7 +237,7 @@ async def get_realtime_bars(app: App, request: API.Request, context: API.Context
             ("low", float),
             ("close", float),
             ("volume", int)))
-async def get_historical_bars(app: App, request: API.Request, context: API.Context) -> Awaitable[API.Response]:
+async def get_historical_bars(app: App, request: API.Request, context: API.Context) -> API.Response:
     duration_str, bar_size_str = reconcile_duration_bar_size(
         resolve_duration(request.params.start, request.params.end), resolve_bar_size(request.params.resolution))
     end_datetime_str = request.params.end.strftime(context.DTFMT) if request.params.end else ""

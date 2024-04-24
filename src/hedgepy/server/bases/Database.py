@@ -4,9 +4,13 @@ from psycopg_pool import AsyncConnectionPool
 from typing import Any
 
 
-Schema = Table = Column = str
+Schema = Table = Column = DType = str
 Columns = DTypes = tuple[str]
+ColumnWithDType = tuple[Column, DType]
 ColumnsWithDTypes = tuple[Columns, DTypes]
+
+
+SYS_SCHEMAS = ("information_schema", "pg_catalog", "pg_toast", "public")
 
 
 def _make_conditions(condition_columns: Columns, condition_operators: tuple[str]) -> sql.SQL:
@@ -66,6 +70,13 @@ class CreateTable(CommandABC):
     
     def make(self, schema: Schema, table: Table, columns: ColumnsWithDTypes):
         return super().make(schema=schema, table=table) + _make_columns_dtype(columns) + sql.SQL(');')
+
+
+class CreateColumn(CommandABC):
+    QUERY_STUB = sql.SQL("ALTER TABLE {schema}.{table} ADD COLUMN ")
+    
+    def make(self, schema: Schema, table: Table, column: ColumnWithDType):
+        return super().make(schema=schema, table=table) + _make_columns_dtype((column,)) + sql.SQL(';')
 
 
 class SelectTable(CommandABC):
@@ -170,18 +181,27 @@ class ListSchemas(CommandABC):
     
     
 class ListTables(CommandABC):
-    QUERY_STUB = sql.SQL("SELECT table_name FROM information_schema.tables WHERE table_schema = {schema};")
+    QUERY_STUB = sql.SQL("SELECT table_name FROM information_schema.tables WHERE table_schema = ")
     
     def make(self, schema: Schema):
-        return super().make(schema=schema)
+        return super().make() + sql.Literal(schema) + sql.SQL(';')
     
     
 class ListColumns(CommandABC):
     QUERY_STUB = sql.SQL("""
                          SELECT column_name 
                          FROM information_schema.columns 
-                         WHERE table_schema = {schema} 
-                         AND table_name = {table};
+                         WHERE table_schema =
+                         """)
+    
+    def make(self, schema: Schema, table: Table):
+        return super().make() + sql.Literal(schema) + sql.SQL(" AND table_name = ") + sql.Literal(table) + sql.SQL(';')
+
+
+class CheckDateRange(CommandABC):
+    QUERY_STUB = sql.SQL("""
+                         SELECT MIN(date), MAX(date) 
+                         FROM {schema}.{table};
                          """)
     
     def make(self, schema: Schema, table: Table):
@@ -214,6 +234,7 @@ class Database:
         "list_tables": ListTables(),
         "list_columns": ListColumns(),
         "check_records": CheckRecords(),
+        "check_date_range": CheckDateRange()
     }
         
     def __init__(self, dbname: str, host: str, port: int, user: str, password: str):
@@ -227,7 +248,7 @@ class Database:
         async with self._pool.connection() as conn:
             async with conn.cursor() as cursor: 
                 if data:
-                    await cursor.execute(query_stub, data[0])
+                    await cursor.execute(query_stub, data)
                 else:
                     await cursor.execute(query_stub)
                 try: 
@@ -269,3 +290,18 @@ class Database:
             await self._pool.close()
             raise e
         
+    async def struct(self):
+        existing_schemas = [schema for (schema,) in await self.query("list_schemas") if schema not in SYS_SCHEMAS]
+        di = {schema: {} for schema in existing_schemas}
+        for schema in existing_schemas:
+            tables = [table for (table,) in await self.query("list_tables", schema=schema)]
+            for table in tables:
+                columns = [column for (column,) in await self.query("list_columns", schema=schema, table=table)]
+                if "date" in columns:
+                    (date_range,) = await self.query("check_date_range", schema=schema, table=table)
+                    first_date, last_date = date_range
+                else: 
+                    first_date, last_date = None, None
+                di[schema][table] = {"columns": columns, "date_range": (first_date, last_date)}
+        return di
+    

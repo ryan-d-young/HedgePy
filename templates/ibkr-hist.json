@@ -7,6 +7,6 @@
         "resolution": "PT1H"
     },
     "templates": [
-        {"resource": {"class": "Cash", "handle": "EUR_USD"}}
+        {"resource": "Cash$EUR_USD"}
     ]
 }

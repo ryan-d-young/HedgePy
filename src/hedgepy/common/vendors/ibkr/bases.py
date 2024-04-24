@@ -209,11 +209,12 @@ class BaseClient(EWrapper, EClient):
         Returns:
             tuple[Any | None]: A tuple containing the fields of the message.
         """
-        if await self.conn.transfer():
+#        if await self.conn.transfer():
+        while await self.conn.transfer():
             msg: bytes = self.conn.read()
             fields: tuple[Any] = comm.read_fields(msg)
             self.decoder.interpret(fields)
-            return True
+            yield True
 
 class Client(BaseClient, ABC):
     """ABC to implement specific functions for API interaction."""
@@ -511,7 +512,8 @@ class App:
     async def run(self):
         while self._running:
             try: 
-                if await self.client.recv():
+#                if await self.client.recv():
+                while await self.client.recv():
                     LOGGER.debug("Received message.")
             except KeyboardInterrupt:
                 await self.stop()
